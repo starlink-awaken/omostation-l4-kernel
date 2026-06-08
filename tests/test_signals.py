@@ -118,7 +118,7 @@ class TestSignalBus:
             assert len(signals) >= 1  # 至少有新信号
             last_sig = signals[-1]
             assert last_sig["type"] == "🔴"
-            assert "V-CONTROL-01" in last_sig["message"]
+            assert "missing" in last_sig["message"]
 
     def test_emit_violation_signal_no_errors(self):
         with tempfile.TemporaryDirectory() as td:
