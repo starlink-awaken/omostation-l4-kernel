@@ -9,7 +9,14 @@ cli:
     module: l4_kernel.cli:main
     description: L4 域管理 CLI (domain/kems/cards/health)
 
-mcp: []
+mcp:
+  - port: 7456
+    name: l4-kernel-mcp-sse
+    module: l4_kernel.mcp_server:run_sse
+    protocol: SSE (stdio fallback)
+    description: L4 自我层 MCP SSE 端点(给上层 Agent 跨域信号总线访问)
+    owner: l4-kernel
+    enforcement: env-only   # 默认 7456 但生产用 L4_KERNEL_MCP_PORT env 覆盖
 
 http: []
 
