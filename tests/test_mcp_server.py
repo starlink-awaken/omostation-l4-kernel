@@ -144,8 +144,8 @@ class TestSignalTools:
 
 
 class TestToolRegistry:
-    def test_42_tools_registered(self):
-        assert len(TOOLS) == 42
+    def test_tools_registered(self):
+        assert len(TOOLS) == 43  # 42 original + l4_reload
 
     def test_all_tools_callable(self):
         for name, fn in TOOLS.items():

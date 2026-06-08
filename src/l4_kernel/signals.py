@@ -64,10 +64,11 @@ class SignalBus:
         }
         kems.append_signal(event)
 
-        # 跨域信号 → 同时写入 @驾驶舱
+        # 跨域信号 → 同时写入 @驾驶舱 (带文件锁)
         if cross_domain:
             cockpit = self.registry.get("cockpit")
             if cockpit and cockpit.exists():
+                import fcntl
                 cockpit_kems = KemsPlane(cockpit.path)
                 cross_event = {
                     "ts": datetime.now(UTC).isoformat(),
@@ -77,7 +78,15 @@ class SignalBus:
                     "affected": affected_domains or [],
                     "message": message,
                 }
-                cockpit_kems.append_signal(cross_event)
+                # 文件锁保护并发写入
+                sig_file = cockpit.path / "_control" / "signals.md"
+                try:
+                    with open(sig_file, "a") as f:
+                        fcntl.flock(f, fcntl.LOCK_EX)
+                        cockpit_kems.append_signal(cross_event)
+                        fcntl.flock(f, fcntl.LOCK_UN)
+                except (OSError, ValueError):
+                    cockpit_kems.append_signal(cross_event)  # 回退: 无锁写入
 
         return True
 

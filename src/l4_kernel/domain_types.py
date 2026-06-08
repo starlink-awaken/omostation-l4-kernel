@@ -332,8 +332,18 @@ class EngineDomain(Domain):
 # 工厂函数
 # ═════════════════════════════════════════════════════════════════════
 
+_WRAP_CACHE: dict[int, Domain] = {}
+
+
 def wrap_domain(domain: Domain):
-    """将 Domain 包装为对应的特化类型。"""
+    """将 Domain 包装为对应的特化类型 (带缓存, 避免重复创建)。
+
+    同一 Domain 实例多次调用返回同一特化实例。
+    """
+    key = id(domain)
+    if key in _WRAP_CACHE:
+        return _WRAP_CACHE[key]
+
     mapping = {
         "document": DocumentDomain,
         "config": ConfigDomain,
@@ -344,8 +354,7 @@ def wrap_domain(domain: Domain):
         "engine": EngineDomain,
     }
     cls = mapping.get(domain.domain_type, Domain)
-    # 创建一个新实例，继承 domain 的属性
-    return cls(
+    wrapped = cls(
         id=domain.id,
         name=domain.name,
         domain_type=domain.domain_type,
@@ -355,3 +364,10 @@ def wrap_domain(domain: Domain):
         governance_tier=domain.governance_tier,
         capabilities=domain.capabilities,
     )
+    _WRAP_CACHE[key] = wrapped
+    return wrapped
+
+
+def clear_wrap_cache() -> None:
+    """清除 wrap 缓存 (用于测试)。"""
+    _WRAP_CACHE.clear()

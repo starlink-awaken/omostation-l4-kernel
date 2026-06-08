@@ -257,10 +257,15 @@ class TestEngineDomain:
 
 class TestWrapDomain:
     def test_wrap_document(self):
+        from l4_kernel.domain_types import clear_wrap_cache
+        clear_wrap_cache()
         d = Domain(id="v", name="V", domain_type="document", path=Path("/tmp"), bos_uri="bos://v/**")
         wrapped = wrap_domain(d)
         assert isinstance(wrapped, DocumentDomain)
         assert wrapped.id == "v"
+        # 再次调用应返回缓存实例
+        wrapped2 = wrap_domain(d)
+        assert wrapped is wrapped2
 
     def test_wrap_config(self):
         d = Domain(id="c", name="C", domain_type="config", path=Path("/tmp"), bos_uri="bos://c/**")
@@ -273,10 +278,11 @@ class TestWrapDomain:
         assert isinstance(wrapped, ToolDomain)
 
     def test_wrap_all_types_from_registry(self):
+        from l4_kernel.domain_types import clear_wrap_cache
+        clear_wrap_cache()
         reg = DomainRegistry()
         for domain in reg.list_all():
             wrapped = wrap_domain(domain)
-            # 每种类型都应正确包装
             type_to_class = {
                 "document": DocumentDomain,
                 "config": ConfigDomain,

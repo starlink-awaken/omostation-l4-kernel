@@ -35,6 +35,17 @@ _injector = ClaudeInjector(_registry)
 _plugins = get_plugin_registry()
 
 
+def _reload_globals() -> dict:
+    """重载所有全局实例 (用于运行时配置更新)。"""
+    global _registry, _health, _signals, _lifecycle, _injector
+    _registry = DomainRegistry()
+    _health = DomainHealth(_registry)
+    _signals = SignalBus(_registry)
+    _lifecycle = DomainLifecycle(_registry)
+    _injector = ClaudeInjector(_registry)
+    return {"status": "ok", "message": "Global instances reloaded", "domains": len(_registry.list_all())}
+
+
 def _ok(data: Any = None) -> str:
     return json.dumps({"status": "ok", "data": data} if data is not None else {"status": "ok"}, ensure_ascii=False, default=str)
 
@@ -472,6 +483,8 @@ def l4_workspace_search(domain_id: str, pattern: str) -> str:
 # ═════════════════════════════════════════════════════════════════════
 
 TOOLS = {
+    # 系统
+    "l4_reload": lambda: json.dumps(_reload_globals(), ensure_ascii=False),
     # 域管理 (7)
     "l4_domains_list": l4_domains_list,
     "l4_domain_info": l4_domain_info,

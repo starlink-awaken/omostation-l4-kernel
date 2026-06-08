@@ -278,14 +278,26 @@ class DomainLifecycle:
                     p.mkdir(parents=True, exist_ok=True)
                     changes.append(f"created plane: {plane}")
 
-            # 确保 5 核心文件存在
+            # 确保 5 核心文件存在 (按需创建, 不覆盖已有)
             control = domain.path / "_control"
-            for f in ["STATE.md", "MEMORY.md", "signals.md", "control-rules.md", "STATUS.md"]:
+            from l4_kernel.templates import (
+                MEMORY_TEMPLATE, STATUS_TEMPLATE, SIGNALS_TEMPLATE,
+                CONTROL_RULES_TEMPLATE,
+            )
+            today = datetime.now(UTC).strftime("%Y-%m-%d")
+            params = {"domain_name": domain.name, "owner": "migrated", "created": today,
+                       "domain_type_desc": "", "domain_purpose": "", "ssot_scope": "", "key_files": ""}
+            file_templates = {
+                "STATE.md": f"# STATE — {domain.name} 状态\n\n## 当前阶段定位\n\n## 活跃事项\n",
+                "MEMORY.md": MEMORY_TEMPLATE.format(**params),
+                "signals.md": SIGNALS_TEMPLATE.format(**params),
+                "control-rules.md": CONTROL_RULES_TEMPLATE.format(**params),
+                "STATUS.md": STATUS_TEMPLATE.format(**params),
+            }
+            for f, template in file_templates.items():
                 if not (control / f).exists():
-                    from l4_kernel.templates import init_domain_kems
-                    init_domain_kems(domain.path, domain_name=domain.name)
+                    (control / f).write_text(template, encoding="utf-8")
                     changes.append(f"created control file: {f}")
-                    break  # init_domain_kems creates all at once
 
         self.signals.emit(
             domain_id, "ℹ️",

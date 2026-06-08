@@ -254,13 +254,20 @@ class ClaudeInjector:
         if self.INJECTION_MARKER not in content:
             return {"domain_id": domain_id, "status": "not_injected", "removed": False}
 
-        # 移除注入的段落 (§0.1, §0.2, §0.3)
-        new_content = re.sub(
-            r"\n## §0\.[123].*?(?=\n## |\Z)",
-            "",
-            content,
-            flags=re.DOTALL,
-        )
+        # 移除注入的段落 — 通过 INJECTION_MARKER 精确定位
+        # 找到包含 marker 的段落，删除整个 §0.1-§0.3 块
+        lines = content.split("\n")
+        new_lines = []
+        skip = False
+        for line in lines:
+            if self.INJECTION_MARKER in line:
+                skip = True
+                continue
+            if skip and line.startswith("## §") and self.INJECTION_MARKER not in line:
+                skip = False
+            if not skip:
+                new_lines.append(line)
+        new_content = "\n".join(new_lines)
         entrypoint.write_text(new_content, encoding="utf-8")
         return {"domain_id": domain_id, "status": "ok", "removed": True}
 

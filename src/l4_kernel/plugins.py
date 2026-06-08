@@ -321,16 +321,18 @@ class DocumentKemsPlugin:
     def _mechanism_freshness_auto_alert(self, domain_path: Path) -> dict:
         return {"mechanism": "freshness_auto_alert", "status": "ok"}
 
-    def _mechanism_status_auto_evaluate(self, domain_path: Path) -> dict:
+    def _mechanism_status_auto_evaluate(self, domain_path: Path,
+                                          warn_threshold: int = 3,
+                                          crit_threshold: int = 3) -> dict:
         from l4_kernel.kems import KemsPlane
         kems = KemsPlane(domain_path)
         signals = kems.read_signals()
         warnings = sum(1 for s in signals[-20:] if s.get("type") == "⚠️")
         criticals = sum(1 for s in signals[-20:] if s.get("type") == "🔴")
 
-        if criticals >= 3:
+        if criticals >= crit_threshold:
             suggested = "CRITICAL"
-        elif warnings >= 3:
+        elif warnings >= warn_threshold:
             suggested = "ALERT"
         else:
             suggested = "STABLE"
@@ -340,6 +342,7 @@ class DocumentKemsPlugin:
             "suggested_status": suggested,
             "recent_warnings": warnings,
             "recent_criticals": criticals,
+            "thresholds": {"warn": warn_threshold, "crit": crit_threshold},
         }
 
 
