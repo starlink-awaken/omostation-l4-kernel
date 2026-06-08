@@ -363,6 +363,21 @@ class PluginRegistry:
     def _load_builtin_plugins(self) -> None:
         """加载内置插件。"""
         self.register(DocumentKemsPlugin())
+        # 加载 6 种域类型插件
+        from l4_kernel.domain_plugins import (
+            ConfigDomainPlugin,
+            ToolDomainPlugin,
+            EngineDomainPlugin,
+            StorageDomainPlugin,
+            ModelDomainPlugin,
+            WorkspaceDomainPlugin,
+        )
+        self.register(ConfigDomainPlugin())
+        self.register(ToolDomainPlugin())
+        self.register(EngineDomainPlugin())
+        self.register(StorageDomainPlugin())
+        self.register(ModelDomainPlugin())
+        self.register(WorkspaceDomainPlugin())
 
     def register(self, plugin: L4Plugin) -> None:
         """注册插件。"""

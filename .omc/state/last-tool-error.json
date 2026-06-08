@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd \\\"/Users/xiamingxing/Workspace\\\" && cat projects/l4-kernel/src/l4_kernel/__init__.py 2>/dev/null && echo \\\"---\\\" && grep -nE \\\"def main|cmd_health\\\" projects/l4-kernel/src/l4_kernel/__i...",
+  "error": "Exit code 1\n\"\"\"L4 Kernel — 自我层管理面公共 API。\"\"\"\n\nfrom l4_kernel.registry import Domain, DomainRegistry\n\n__all__ = [\"Domain\", \"DomainRegistry\"]\n__version__ = \"0.1.0\"\n---\n---",
+  "timestamp": "2026-06-08T12:22:57.764Z",
+  "retry_count": 1
+}
