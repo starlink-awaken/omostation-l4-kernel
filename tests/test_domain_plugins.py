@@ -117,6 +117,7 @@ class TestStorageDomainPlugin:
         plugin = StorageDomainPlugin()
         result = plugin._action_disk_monitor(Path("/"))
         assert result["action"] == "disk_monitor"
+        assert result["status"] in ("ok", "warning", "critical")
 
 
 class TestModelDomainPlugin:
@@ -136,7 +137,7 @@ class TestModelDomainPlugin:
             (root / "model.bin").write_text("fake model data\n" * 100)
             plugin = ModelDomainPlugin()
             result = plugin._action_model_inventory(root)
-            assert result["total"] >= 1
+            assert result["total"] == 1
 
 
 class TestWorkspaceDomainPlugin:
@@ -156,4 +157,4 @@ class TestWorkspaceDomainPlugin:
             (root / "README.md").write_text("# Test\n")
             plugin = WorkspaceDomainPlugin()
             result = plugin._action_workspace_index(root)
-            assert result["total_files"] >= 1
+            assert result["total_files"] == 1
