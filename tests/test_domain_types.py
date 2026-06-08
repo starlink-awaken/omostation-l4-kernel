@@ -14,6 +14,7 @@ from l4_kernel.domain_types import (
     StorageDomain,
     ToolDomain,
     WorkspaceDomain,
+    clear_wrap_cache,
     wrap_domain,
 )
 
