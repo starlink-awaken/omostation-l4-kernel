@@ -2,13 +2,17 @@
 
 每种域类型有 3-5 个业务动作，封装在 Plugin 中。
 通过 PluginRegistry 按域类型自动加载和分发。
+
+设计原则:
+- 插件方法接受 domain_path: Path，内部调用 domain_types 的静态/模块级方法
+- 不创建临时 Domain 实例，直接使用 Path + domain_types 函数
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from l4_kernel.registry import Domain
+from l4_kernel import domain_types as dt
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -62,15 +66,10 @@ class ConfigDomainPlugin:
         }
 
     def _action_config_audit(self, domain_path: Path) -> dict:
-        from l4_kernel.domain_types import ConfigDomain
-        d = ConfigDomain(
-            id="temp", name="temp", domain_type="config",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        configs = d.list_configs()
+        configs = dt.ConfigDomain._list_configs(domain_path)
         issues = []
         for c in configs:
-            result = d.validate_schema(c["name"])
+            result = dt.ConfigDomain._validate_schema(domain_path, c["name"])
             if not result["valid"]:
                 issues.append({"file": c["name"], "error": result.get("error", "unknown")})
         return {
@@ -99,15 +98,10 @@ class ConfigDomainPlugin:
         return {"action": "config_backup", "backed_up": count, "archive": str(archive)}
 
     def _action_config_validate_all(self, domain_path: Path) -> dict:
-        from l4_kernel.domain_types import ConfigDomain
-        d = ConfigDomain(
-            id="temp", name="temp", domain_type="config",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        configs = d.list_configs()
+        configs = dt.ConfigDomain._list_configs(domain_path)
         results = {}
         for c in configs:
-            results[c["name"]] = d.validate_schema(c["name"])
+            results[c["name"]] = dt.ConfigDomain._validate_schema(domain_path, c["name"])
         return {"action": "config_validate_all", "results": results}
 
     def _mechanism_config_auto_backup(self, domain_path: Path) -> dict:
@@ -164,65 +158,36 @@ class ToolDomainPlugin:
         return {"tool_auto_inventory": self._action_tool_inventory}
 
     def _action_tool_inventory(self, domain_path: Path) -> dict:
-        from l4_kernel.domain_types import ToolDomain
-        d = ToolDomain(
-            id="temp", name="temp", domain_type="tool",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        tools = d.list_tools()
-        return {
-            "action": "tool_inventory",
-            "total": len(tools),
-            "tools": tools[:50],
-        }
+        tools = dt.ToolDomain._list_tools(domain_path)
+        return {"action": "tool_inventory", "total": len(tools), "tools": tools[:50]}
 
     def _action_tool_health_check(self, domain_path: Path) -> dict:
-        from l4_kernel.domain_types import ToolDomain
-        d = ToolDomain(
-            id="temp", name="temp", domain_type="tool",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        tools = d.list_tools()
+        tools = dt.ToolDomain._list_tools(domain_path)
         healthy = 0
         issues = []
         for t in tools:
-            result = d.check_tool(t["name"])
+            result = dt.ToolDomain._check_tool(domain_path, t["name"])
             if result.get("executable"):
                 healthy += 1
             else:
                 issues.append(t["name"])
-        return {
-            "action": "tool_health_check",
-            "total": len(tools),
-            "healthy": healthy,
-            "issues": issues,
-        }
+        return {"action": "tool_health_check", "total": len(tools), "healthy": healthy, "issues": issues}
 
     def _action_tool_deprecation_scan(self, domain_path: Path) -> dict:
         from datetime import UTC, datetime
-        from l4_kernel.domain_types import ToolDomain
-        d = ToolDomain(
-            id="temp", name="temp", domain_type="tool",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        tools = d.list_tools()
+        tools = dt.ToolDomain._list_tools(domain_path)
         deprecated = []
         for t in tools:
             mtime = t.get("mtime", "")
             if mtime:
                 try:
-                    dt = datetime.fromisoformat(mtime.replace("Z", "+00:00"))
-                    days = (datetime.now(UTC) - dt).days
+                    dt_val = datetime.fromisoformat(mtime.replace("Z", "+00:00"))
+                    days = (datetime.now(UTC) - dt_val).days
                     if days > 180:
                         deprecated.append({"name": t["name"], "days_since_use": days})
                 except (ValueError, TypeError):
                     pass
-        return {
-            "action": "tool_deprecation_scan",
-            "total": len(tools),
-            "deprecated": len(deprecated),
-            "details": deprecated,
-        }
+        return {"action": "tool_deprecation_scan", "total": len(tools), "deprecated": len(deprecated), "details": deprecated}
 
     def _action_tool_sync_ecos_link(self, domain_path: Path) -> dict:
         return {"action": "tool_sync_ecos_link", "status": "ok", "note": "ecos-link sync pending"}
@@ -277,20 +242,10 @@ class EngineDomainPlugin:
         return {"engine_auto_health_check": self._action_engine_health_check}
 
     def _action_engine_health_check(self, domain_path: Path) -> dict:
-        from l4_kernel.domain_types import EngineDomain
-        d = EngineDomain(
-            id="temp", name="temp", domain_type="engine",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        process = d.check_process()
-        config = d.get_config()
-        logs = d.get_logs(lines=10)
-        return {
-            "action": "engine_health_check",
-            "process": process,
-            "config_exists": config is not None,
-            "recent_logs": len(logs),
-        }
+        process = dt.EngineDomain._check_process(domain_path)
+        config = dt.EngineDomain._get_config(domain_path)
+        logs = dt.EngineDomain._get_logs(domain_path, lines=10)
+        return {"action": "engine_health_check", "process": process, "config_exists": config is not None, "recent_logs": len(logs)}
 
     def _action_engine_restart(self, domain_path: Path) -> dict:
         return {"action": "engine_restart", "status": "not_implemented", "note": "restart requires daemon support"}
@@ -305,19 +260,9 @@ class EngineDomainPlugin:
         return {"action": "engine_config_rotate", "status": "ok", "backup": str(backup)}
 
     def _action_engine_log_analyze(self, domain_path: Path) -> dict:
-        from l4_kernel.domain_types import EngineDomain
-        d = EngineDomain(
-            id="temp", name="temp", domain_type="engine",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        logs = d.get_logs(lines=50)
+        logs = dt.EngineDomain._get_logs(domain_path, lines=50)
         errors = [l for l in logs if "error" in l.lower() or "exception" in l.lower() or "traceback" in l.lower()]
-        return {
-            "action": "engine_log_analyze",
-            "total_lines": len(logs),
-            "errors_found": len(errors),
-            "sample": errors[:5],
-        }
+        return {"action": "engine_log_analyze", "total_lines": len(logs), "errors_found": len(errors), "sample": errors[:5]}
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -368,12 +313,7 @@ class StorageDomainPlugin:
         return {"disk_auto_monitor": self._action_disk_monitor}
 
     def _action_disk_monitor(self, domain_path: Path) -> dict:
-        from l4_kernel.domain_types import StorageDomain
-        d = StorageDomain(
-            id="temp", name="temp", domain_type="storage",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        usage = d.get_disk_usage()
+        usage = dt.StorageDomain._get_disk_usage(domain_path)
         status = "ok"
         if usage.get("use_percent"):
             pct = int(usage["use_percent"].rstrip("%"))
@@ -387,12 +327,7 @@ class StorageDomainPlugin:
         return {"action": "cleanup_stale", "status": "not_implemented", "note": "requires file age scanning"}
 
     def _action_mount_check(self, domain_path: Path) -> dict:
-        from l4_kernel.domain_types import StorageDomain
-        d = StorageDomain(
-            id="temp", name="temp", domain_type="storage",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        return {"action": "mount_check", "mount": d.check_mount_status()}
+        return {"action": "mount_check", "mount": dt.StorageDomain._check_mount_status(domain_path)}
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -442,30 +377,15 @@ class ModelDomainPlugin:
         return {"model_auto_inventory": self._action_model_inventory}
 
     def _action_model_inventory(self, domain_path: Path) -> dict:
-        from l4_kernel.domain_types import ModelDomain
-        d = ModelDomain(
-            id="temp", name="temp", domain_type="model",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        models = d.list_models()
+        models = dt.ModelDomain._list_models(domain_path)
         total_size = sum(m.get("size_mb", 0) for m in models)
-        return {
-            "action": "model_inventory",
-            "total": len(models),
-            "total_size_mb": round(total_size, 1),
-            "models": models[:20],
-        }
+        return {"action": "model_inventory", "total": len(models), "total_size_mb": round(total_size, 1), "models": models[:20]}
 
     def _action_checksum_verify(self, domain_path: Path) -> dict:
-        from l4_kernel.domain_types import ModelDomain
-        d = ModelDomain(
-            id="temp", name="temp", domain_type="model",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        models = d.list_models()
+        models = dt.ModelDomain._list_models(domain_path)
         results = {}
         for m in models[:10]:
-            checksum = d.get_model_checksum(m["path"])
+            checksum = dt.ModelDomain._get_checksum(domain_path, m["path"])
             results[m["name"]] = {"checksum": checksum[:16] + "..." if checksum else None}
         return {"action": "checksum_verify", "verified": len(results)}
 
@@ -520,17 +440,8 @@ class WorkspaceDomainPlugin:
         return {"workspace_auto_index": self._action_workspace_index}
 
     def _action_workspace_index(self, domain_path: Path) -> dict:
-        from l4_kernel.domain_types import WorkspaceDomain
-        d = WorkspaceDomain(
-            id="temp", name="temp", domain_type="workspace",
-            path=domain_path, bos_uri="bos://temp/**",
-        )
-        files = d.index_files(max_depth=2)
-        return {
-            "action": "workspace_index",
-            "total_files": len(files),
-            "sample": files[:10],
-        }
+        files = dt.WorkspaceDomain._index_files(domain_path, max_depth=2)
+        return {"action": "workspace_index", "total_files": len(files), "sample": files[:10]}
 
     def _action_file_search(self, domain_path: Path) -> dict:
         return {"action": "file_search", "status": "ok", "note": "use l4_workspace_search MCP tool"}
