@@ -95,6 +95,7 @@ def main() -> int:
         print("    domain list [--type=<t>] [--json]  列出域")
         print("    domain info <domain_id>             域详情")
         print("    health [--json]                     全域健康")
+        print("    mcp [--http|--sse] [--port=N]       启动 MCP Server")
         return 0
 
     cmd = args[0]
@@ -110,6 +111,11 @@ def main() -> int:
 
     if cmd == "health":
         return cmd_health(args[1:])
+
+    if cmd == "mcp":
+        from l4_kernel.mcp_server import main as mcp_main
+        sys.argv = ["l4-kernel"] + args[1:]
+        return mcp_main()
 
     print(f"未知命令: {cmd}", file=sys.stderr)
     return 1
