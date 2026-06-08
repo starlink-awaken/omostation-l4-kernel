@@ -87,11 +87,13 @@ class ConfigDomainPlugin:
         archive = domain_path / "_archive"
         archive.mkdir(parents=True, exist_ok=True)
         count = 0
-        for f in domain_path.rglob("*"):
+        for f in list(domain_path.rglob("*")):
             if f.is_file() and f.suffix in (".yaml", ".yml", ".json") and not f.name.startswith("."):
+                # Skip files already in _archive to avoid recursive backup
+                if "_archive" in f.parts:
+                    continue
                 import shutil
-                dest = archive / f.relative_to(domain_path)
-                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest = archive / f.name
                 shutil.copy2(f, dest)
                 count += 1
         return {"action": "config_backup", "backed_up": count, "archive": str(archive)}
