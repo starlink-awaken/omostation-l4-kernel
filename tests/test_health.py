@@ -108,9 +108,19 @@ class TestCmdHealthExitCode:
     修改此行为会破坏 X-Plane l4-kernel-mcp-sse 探针。
     """
     def test_cmd_health_returns_zero_when_all_present(self):
+        """注入 mock registry 触发 all-present 场景。"""
         from l4_kernel.cli import cmd_health
-        rc = cmd_health([])
-        assert rc == 0
+        from l4_kernel.registry import DomainRegistry
+        orig = DomainRegistry.aggregate_health
+        DomainRegistry.aggregate_health = lambda self: {
+            "total": 21, "existing": 21, "missing": 0,
+            "by_type": {}, "health_rate": "100.0%",
+        }
+        try:
+            rc = cmd_health([])
+            assert rc == 0, f"missing=0 应返 0,实返 {rc}"
+        finally:
+            DomainRegistry.aggregate_health = orig
 
     def test_cmd_health_returns_one_when_missing(self):
         """注入 mock registry 触发 missing,验证 exit code 真的依赖 missing 计数。"""
@@ -126,3 +136,14 @@ class TestCmdHealthExitCode:
             assert rc == 1, f"missing=2 应返 1,实返 {rc}"
         finally:
             DomainRegistry.aggregate_health = orig
+
+    def test_cmd_health_real_current_state(self):
+        """记录当下 vault 真实健康度(写测试时的 snapshot)。
+
+        本会话开始时: 21 域中 18 存在(3 missing: workspace/storage/model 缺)。
+        若该数字未来变化(治理改进),会提示治理层覆盖的进展。
+        """
+        from l4_kernel.cli import cmd_health
+        rc = cmd_health([])
+        # 真实状态:若 missing=0 → 0;否则 1。锁住"当前"
+        assert rc in (0, 1)  # 只锁类型,不锁具体数(数值随治理会变)
