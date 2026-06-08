@@ -255,6 +255,7 @@ class DomainRegistry:
                 t: {
                     "total": len(self.list_by_type(t)),
                     "existing": sum(1 for d in self.list_by_type(t) if d.exists()),
+                    "missing": len(self.list_by_type(t)) - sum(1 for d in self.list_by_type(t) if d.exists()),
                 }
                 for t in ("document", "config", "engine", "tool", "workspace", "storage", "model")
             },
