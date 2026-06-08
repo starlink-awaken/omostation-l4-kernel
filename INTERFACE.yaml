@@ -1,0 +1,20 @@
+# L4 Kernel Interface Registry
+
+project: l4-kernel
+layer: L4
+description: 自我层管理面 — 19域统一注册 + KEMS六面操作 + 健康聚合
+
+cli:
+  - name: l4-kernel
+    module: l4_kernel.cli:main
+    description: L4 域管理 CLI (domain/kems/cards/health)
+
+mcp: []
+
+http: []
+
+dependencies:
+  runtime: [pyyaml]
+  dev: [pytest, ruff]
+
+tests: 0
