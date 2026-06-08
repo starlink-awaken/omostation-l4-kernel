@@ -1,0 +1,101 @@
+"""Tests for L4 Kernel DomainHealth."""
+
+from pathlib import Path
+
+from l4_kernel.registry import DomainRegistry
+from l4_kernel.health import DomainHealth
+from l4_kernel.templates import init_domain_kems
+
+
+class TestDomainHealth:
+    def test_aggregate_health(self):
+        health = DomainHealth()
+        result = health.aggregate_health()
+        assert result["total"] == 19
+        assert "document_domains" in result
+        assert "by_type" in result
+        assert result["health_rate"].endswith("%")
+
+    def test_document_domains_included(self):
+        health = DomainHealth()
+        result = health.aggregate_health()
+        assert "vault" in result["document_domains"]
+        assert "personal" in result["document_domains"]
+        assert "cockpit" in result["document_domains"]
+
+    def test_check_freshness_vault(self):
+        health = DomainHealth()
+        result = health.check_freshness("vault")
+        assert result["domain_id"] == "vault"
+        assert "fresh" in result
+        assert "issues" in result
+
+    def test_check_freshness_nonexistent(self):
+        health = DomainHealth()
+        result = health.check_freshness("nonexistent")
+        assert result["status"] == "not_found"
+
+    def test_check_all_freshness(self):
+        health = DomainHealth()
+        result = health.check_all_freshness()
+        assert "vault" in result
+        assert "cockpit" in result
+        assert "personal" in result
+
+    def test_cross_domain_search(self):
+        health = DomainHealth()
+        results = health.cross_domain_search("测试", max_per_domain=2)
+        assert isinstance(results, list)
+
+    def test_generate_dashboard(self):
+        health = DomainHealth()
+        dashboard = health.generate_dashboard()
+        assert "# L4 全域健康 DASHBOARD" in dashboard
+        assert "总览" in dashboard
+        assert "按类型" in dashboard
+        assert "DocumentDomain 详情" in dashboard
+
+    def test_get_violations(self):
+        health = DomainHealth()
+        violations = health.get_violations()
+        assert isinstance(violations, dict)
+        # 存在的域至少有一个被检查
+        reg = DomainRegistry()
+        existing_docs = [d.id for d in reg.list_document_domains() if d.exists()]
+        checked = [did for did in existing_docs if did in violations]
+        assert len(checked) >= 1
+
+
+class TestFreshnessWithRealDomain:
+    """测试新鲜度检查在真实域上的行为。"""
+
+    def test_vault_freshness_has_expected_fields(self):
+        health = DomainHealth()
+        result = health.check_freshness("vault")
+        assert "domain_id" in result
+        assert "fresh" in result
+        assert "issues" in result
+        assert "issue_count" in result
+        for issue in result["issues"]:
+            assert "file" in issue
+            assert "level" in issue
+            assert "message" in issue
+            assert issue["level"] in ("⚠️", "🔴")
+
+
+class TestCalcFreshness:
+    """测试新鲜度计算。"""
+
+    def test_calc_freshness_vault(self):
+        reg = DomainRegistry()
+        health = DomainHealth(reg)
+        d = reg.get("vault")
+        score = health._calc_freshness(d)
+        assert 0.0 <= score <= 1.0
+
+    def test_calc_freshness_missing_domain(self):
+        reg = DomainRegistry()
+        health = DomainHealth(reg)
+        d = reg.get("shareddisk")
+        score = health._calc_freshness(d)
+        assert score == 0.0
