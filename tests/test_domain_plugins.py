@@ -157,4 +157,4 @@ class TestWorkspaceDomainPlugin:
             (root / "README.md").write_text("# Test\n")
             plugin = WorkspaceDomainPlugin()
             result = plugin._action_workspace_index(root)
-            assert result["total"] == 1
+            assert result["total_files"] == 1
