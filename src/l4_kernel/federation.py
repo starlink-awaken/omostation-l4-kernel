@@ -109,13 +109,24 @@ class FederationHub:
 
     def _save_config(self) -> None:
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        # 过滤敏感字段
+        safe_peers = []
+        for p in self.peers.values():
+            d = p.to_dict()
+            # 移除可能含 token 的 health_endpoint
+            if "health_endpoint" in d and "token" in d.get("health_endpoint", "").lower():
+                d["health_endpoint"] = "[REDACTED]"
+            safe_peers.append(d)
+
         data = {
             "node_id": self.node_id,
-            "peers": [p.to_dict() for p in self.peers.values()],
+            "peers": safe_peers,
             "federated_domains": [d.to_dict() for d in self.federated_domains.values()],
             "updated": datetime.now(UTC).isoformat(),
         }
         self.config_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        # 设置 600 权限
+        self.config_path.chmod(0o600)
 
     # ── 节点管理 ──────────────────────────────────────────────────
 

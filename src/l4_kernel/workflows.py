@@ -121,6 +121,9 @@ class ScenarioEngine:
 
     def _execute_step(self, step: WorkflowStep, **kwargs) -> dict:
         """执行单个步骤。"""
+        import logging
+        logger = logging.getLogger(__name__)
+
         # 条件检查
         if step.condition and not step.condition():
             return {"status": "skipped", "reason": "condition not met"}
@@ -133,9 +136,10 @@ class ScenarioEngine:
         if not domain_obj:
             raise ValueError(f"Domain '{domain}' not found")
 
-        # 插件动作
+        # 插件动作 (优先)
         plugin_action = self.plugins.get_action(domain_obj.domain_type, action)
         if plugin_action:
+            logger.debug(f"Step action '{action}' → plugin '{domain_obj.domain_type}'")
             return plugin_action(domain_obj.path)
 
         # 内置动作
@@ -151,9 +155,17 @@ class ScenarioEngine:
         }
 
         if action in builtin:
+            logger.debug(f"Step action '{action}' → builtin")
             return builtin[action]()
 
-        raise ValueError(f"Unknown action: {action}")
+        # 尝试跨域类型查找插件动作
+        for dtype in ["document", "config", "tool", "engine", "storage", "model", "workspace"]:
+            alt = self.plugins.get_action(dtype, action)
+            if alt:
+                logger.debug(f"Step action '{action}' → plugin '{dtype}' (cross-type)")
+                return alt(domain_obj.path)
+
+        raise ValueError(f"Unknown action: '{action}'. Available builtins: {list(builtin.keys())}. Available plugins: check l4_plugin_actions")
 
     def _validate_domain(self, domain_id: str) -> dict:
         from l4_kernel.templates import KemsValidator

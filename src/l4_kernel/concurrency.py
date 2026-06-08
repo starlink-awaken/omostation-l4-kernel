@@ -125,10 +125,13 @@ class ConcurrencyManager:
 
     # ── 批量锁 ────────────────────────────────────────────────────
 
+    def __init__(self):
+        self._held_locks: set[str] = set()
+
     @contextmanager
     def lock_domain_control(self, domain_path: Path,
                             files: list[str] | None = None):
-        """锁定域控制面的多个文件 (按排序加锁避免死锁)。
+        """锁定域控制面的多个文件 (按排序加锁避免死锁, 支持重入)。
 
         Args:
             domain_path: 域根路径
@@ -143,10 +146,15 @@ class ConcurrencyManager:
         locks = []
         try:
             for fp in filepaths:
+                key = str(fp)
+                if key in self._held_locks:
+                    continue  # 重入: 跳过已持有的锁
+                self._held_locks.add(key)
                 lock_ctx = self.lock(fp)
                 lock_ctx.__enter__()
-                locks.append(lock_ctx)
+                locks.append((key, lock_ctx))
             yield
         finally:
-            for lock_ctx in reversed(locks):
+            for key, lock_ctx in reversed(locks):
+                self._held_locks.discard(key)
                 lock_ctx.__exit__(None, None, None)
