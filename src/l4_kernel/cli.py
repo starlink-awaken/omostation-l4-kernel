@@ -78,7 +78,8 @@ def cmd_health(args: list[str]) -> int:
             icon = "✅" if s["missing"] == 0 else "⚠️"
             print(f"    {icon} {t}: {s['existing']}/{s['total']}")
         print()
-    return 0
+    # Exit code: 0 = 全存在, 1 = 有 missing。X-Plane 探针用此判定。
+    return 0 if health.get("missing", 0) == 0 else 1
 
 
 def main() -> int:

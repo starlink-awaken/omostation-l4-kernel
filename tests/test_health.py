@@ -99,3 +99,30 @@ class TestCalcFreshness:
         d = reg.get("shareddisk")
         score = health._calc_freshness(d)
         assert score == 0.0
+
+
+class TestCmdHealthExitCode:
+    """保护 l4-kernel cli.py:cmd_health exit code 行为(X-Plane 探针契约)。
+
+    exit 0 = 全域存在(L4 健康) / exit 1 = 有 missing(异常)。
+    修改此行为会破坏 X-Plane l4-kernel-mcp-sse 探针。
+    """
+    def test_cmd_health_returns_zero_when_all_present(self):
+        from l4_kernel.cli import cmd_health
+        rc = cmd_health([])
+        assert rc == 0
+
+    def test_cmd_health_returns_one_when_missing(self):
+        """注入 mock registry 触发 missing,验证 exit code 真的依赖 missing 计数。"""
+        from l4_kernel.cli import cmd_health
+        from l4_kernel.registry import DomainRegistry
+        orig = DomainRegistry.aggregate_health
+        DomainRegistry.aggregate_health = lambda self: {
+            "total": 21, "existing": 19, "missing": 2,
+            "by_type": {}, "health_rate": "90.5%",
+        }
+        try:
+            rc = cmd_health([])
+            assert rc == 1, f"missing=2 应返 1,实返 {rc}"
+        finally:
+            DomainRegistry.aggregate_health = orig
