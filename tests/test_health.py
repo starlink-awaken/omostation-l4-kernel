@@ -11,7 +11,7 @@ class TestDomainHealth:
     def test_aggregate_health(self):
         health = DomainHealth()
         result = health.aggregate_health()
-        assert result["total"] == 19
+        assert result["total"] == 21
         assert "document_domains" in result
         assert "by_type" in result
         assert result["health_rate"].endswith("%")

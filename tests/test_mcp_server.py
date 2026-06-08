@@ -33,7 +33,7 @@ from l4_kernel.mcp_server import (
 class TestDomainTools:
     def test_domains_list_all(self):
         result = json.loads(l4_domains_list())
-        assert len(result) == 19
+        assert len(result) == 21
 
     def test_domains_list_by_type(self):
         result = json.loads(l4_domains_list("document"))

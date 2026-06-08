@@ -170,11 +170,25 @@ _BUILTIN_DOMAINS: list[Domain] = [
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
         governance_tier=3,
     ),
+    # ── L4 Kernel (EngineDomain) ──
+    Domain(
+        id="l4-kernel", name="L4 Kernel", domain_type="engine",
+        path=Path.home() / "Workspace" / "projects" / "l4-kernel",
+        bos_uri="bos://l4-kernel/**",
+        governance_tier=1,
+    ),
+    # ── eCOS Workbench (WorkspaceDomain) ──
+    Domain(
+        id="ecos-workbench", name="eCOS Workbench", domain_type="workspace",
+        path=Path.home() / "Workspace",
+        bos_uri="bos://ecos/**",
+        governance_tier=1,
+    ),
 ]
 
 
 class DomainRegistry:
-    """L4 19 域统一注册表。
+    """L4 21 域统一注册表。
 
     内置默认注册表基于 CLAUDE_COWORK_GLOBAL.md v6.0。
     可通过 load_from_index() 从 DOMAIN-INDEX.md 加载覆盖。

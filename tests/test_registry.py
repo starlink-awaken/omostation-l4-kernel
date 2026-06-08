@@ -34,15 +34,15 @@ class TestDomain:
 
 
 class TestDomainRegistry:
-    def test_list_all_returns_19_domains(self):
+    def test_list_all_returns_21_domains(self):
         reg = DomainRegistry()
         all_d = reg.list_all()
-        assert len(all_d) == 19, f"Expected 19 domains, got {len(all_d)}: {[d.id for d in all_d]}"
+        assert len(all_d) == 21, f"Expected 21 domains, got {len(all_d)}: {[d.id for d in all_d]}"
 
     def test_list_by_type_document(self):
         reg = DomainRegistry()
         docs = reg.list_by_type("document")
-        assert len(docs) == 8  # 7 original + obsidian-vault
+        assert len(docs) == 8
 
     def test_list_by_type_config(self):
         reg = DomainRegistry()
@@ -52,7 +52,12 @@ class TestDomainRegistry:
     def test_list_by_type_engine(self):
         reg = DomainRegistry()
         engines = reg.list_by_type("engine")
-        assert len(engines) == 2  # minerva + knowledge
+        assert len(engines) == 3  # minerva + knowledge + l4-kernel
+
+    def test_list_by_type_workspace(self):
+        reg = DomainRegistry()
+        workspaces = reg.list_by_type("workspace")
+        assert len(workspaces) == 2  # sharedwork + ecos-workbench
 
     def test_get_vault(self):
         reg = DomainRegistry()
@@ -106,13 +111,13 @@ class TestDomainRegistry:
     def test_aggregate_health(self):
         reg = DomainRegistry()
         h = reg.aggregate_health()
-        assert h["total"] == 19
+        assert h["total"] == 21
         assert "document" in h["by_type"]
 
     def test_to_dict(self):
         reg = DomainRegistry()
         d = reg.to_dict()
-        assert len(d["domains"]) == 19
+        assert len(d["domains"]) == 21
         assert "health" in d
 
     def test_list_document_domains(self):
