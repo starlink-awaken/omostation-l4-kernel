@@ -11,6 +11,7 @@ requires-python = ">=3.13"
 license = { text = "MIT" }
 dependencies = [
     "pyyaml>=6.0",
+    "model-driven",
 ]
 
 [project.optional-dependencies]
@@ -40,3 +41,6 @@ ignore = ["S101", "S603", "S607", "S108", "S110", "S314", "S608", "E402", "E501"
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.uv.sources]
+model-driven = { path = "../model-driven", editable = true }

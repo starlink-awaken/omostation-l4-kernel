@@ -1,4 +1,4 @@
-"""L4 Kernel MCP Server — 42 tools, 19域全覆盖.
+"""L4 Kernel MCP Server — 42 tools, 20域全覆盖.
 
 基于 fastmcp，提供标准化 L4 操作接口。
 Agent 通过此 MCP Server 操作 L4 数据，无需直接接触文件系统。
@@ -13,17 +13,23 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
 from typing import Any
 
 from l4_kernel import DomainRegistry
-from l4_kernel.kems import KemsPlane, CardsPlane
-from l4_kernel.health import DomainHealth
-from l4_kernel.signals import SignalBus
-from l4_kernel.templates import KemsValidator, init_domain_kems
 from l4_kernel.claude_injector import ClaudeInjector
+from l4_kernel.health import DomainHealth
+from l4_kernel.kems import CardsPlane, KemsPlane
 from l4_kernel.lifecycle import DomainLifecycle
 from l4_kernel.plugins import get_plugin_registry
+from l4_kernel.signals import SignalBus
+from l4_kernel.skill_loader import (
+    domain_capabilities_summary,
+    domain_skills_dir,
+    domain_workflows_dir,
+    find_skill,
+    find_workflow,
+)
+from l4_kernel.templates import KemsValidator
 
 # ── 全局实例 ──────────────────────────────────────────────────────
 
@@ -332,7 +338,7 @@ def l4_claude_validate(domain_id: str = "") -> str:
 
 
 # ═════════════════════════════════════════════════════════════════════
-# 插件/工作流 (5 tools)
+# 插件/工作流 (5 tools) + 文件操作 + 可执行资产
 # ═════════════════════════════════════════════════════════════════════
 
 def l4_plugin_actions(domain_type: str) -> str:
@@ -377,20 +383,155 @@ def l4_plugin_run_mechanism(domain_type: str, mechanism_name: str, domain_id: st
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
+# ── 文件操作 (4 tools: skill 的底层执行能力) ──────────────────────
+
+
+def l4_file_write(domain_id: str, path: str, content: str) -> str:
+    """写入文件到域内路径。如果文件存在则覆盖，目录不存在自动创建。"""
+    d = _registry.get(domain_id)
+    if not d or not d.exists():
+        return _err(f"Domain '{domain_id}' not available")
+    fp = d.path / path
+    try:
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        fp.write_text(content, encoding="utf-8")
+        return _ok({"path": str(fp), "size": len(content)})
+    except OSError as e:
+        return _err(f"Write failed: {e}")
+
+
+def l4_file_append(domain_id: str, path: str, content: str) -> str:
+    """追加内容到文件末尾。"""
+    d = _registry.get(domain_id)
+    if not d or not d.exists():
+        return _err(f"Domain '{domain_id}' not available")
+    fp = d.path / path
+    try:
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        with open(fp, "a", encoding="utf-8") as f:
+            f.write(content)
+        return _ok({"path": str(fp), "mode": "append"})
+    except OSError as e:
+        return _err(f"Append failed: {e}")
+
+
+def l4_file_read(domain_id: str, path: str) -> str:
+    """读取域内文件内容。"""
+    d = _registry.get(domain_id)
+    if not d or not d.exists():
+        return _err(f"Domain '{domain_id}' not available")
+    fp = d.path / path
+    if not fp.exists():
+        return _err(f"File not found: {fp}")
+    try:
+        return _ok({"path": str(fp), "content": fp.read_text(encoding="utf-8")})
+    except OSError as e:
+        return _err(f"Read failed: {e}")
+
+
+def l4_entry_create(domain_id: str, parent_dir: str, name: str, content: str) -> str:
+    """在域内目录下创建新条目（灵感/项目/日志等）。自动生成日期前缀。"""
+    d = _registry.get(domain_id)
+    if not d or not d.exists():
+        return _err(f"Domain '{domain_id}' not available")
+    from datetime import date
+    today = date.today().isoformat()
+    dir_path = d.path / parent_dir
+    fp = dir_path / f"{today}-{name}.md"
+    try:
+        dir_path.mkdir(parents=True, exist_ok=True)
+        fp.write_text(content, encoding="utf-8")
+        return _ok({"path": str(fp), "filename": fp.name, "date": today})
+    except OSError as e:
+        return _err(f"Create entry failed: {e}")
+
+
+# ── 可执行资产查询 (4 tools) ───────────────────────────────────────
+
+
+def l4_skill_list(domain_id: str) -> str:
+    """列出域的 skills。"""
+    d = _registry.get(domain_id)
+    if not d or not d.exists():
+        return _err(f"Domain '{domain_id}' not available")
+    caps = domain_capabilities_summary(d.path)
+    return json.dumps({"domain": domain_id, "skills": caps["skills"]}, ensure_ascii=False, default=str)
+
+
+def l4_skill_show(domain_id: str, skill_id: str) -> str:
+    """查看 skill 定义。"""
+    d = _registry.get(domain_id)
+    if not d or not d.exists():
+        return _err(f"Domain '{domain_id}' not available")
+    skill = find_skill(domain_skills_dir(d.path), skill_id)
+    if not skill:
+        return _err(f"Skill '{skill_id}' not found in domain '{domain_id}'")
+    return json.dumps(skill, ensure_ascii=False, default=str)
+
+
+def l4_workflow_list(domain_id: str) -> str:
+    """列出域的工作流。"""
+    d = _registry.get(domain_id)
+    if not d or not d.exists():
+        return _err(f"Domain '{domain_id}' not available")
+    caps = domain_capabilities_summary(d.path)
+    return json.dumps({"domain": domain_id, "workflows": caps["workflows"]}, ensure_ascii=False, default=str)
+
+
+def l4_workflow_show(domain_id: str, workflow_id: str) -> str:
+    """查看工作流定义。"""
+    d = _registry.get(domain_id)
+    if not d or not d.exists():
+        return _err(f"Domain '{domain_id}' not available")
+    wf = find_workflow(domain_workflows_dir(d.path), workflow_id)
+    if not wf:
+        return _err(f"Workflow '{workflow_id}' not found in domain '{domain_id}'")
+    return json.dumps(wf, ensure_ascii=False, default=str)
+
+
+# ── Skill/Workflow 一键执行 (2 tools) ────────────────────────────
+
+from l4_kernel.workflows import ScenarioEngine
+
+_engine = ScenarioEngine(_registry)
+
+
+def l4_skill_run(domain_id: str, skill_id: str, **params: str) -> str:
+    """执行一个 skill。params 传入模板变量如 project_name='星尘'。"""
+    result = _engine.run_skill(domain_id, skill_id, **params)
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+def l4_workflow_run(domain_id: str, workflow_id: str, **params: str) -> str:
+    """执行一个 workflow（按 skills 顺序编排）。"""
+    result = _engine.run_workflow(domain_id, workflow_id, **params)
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+# ═════════════════════════════════════════════════════════════════════
+# 一致性校验 (1 tool)
+# ═════════════════════════════════════════════════════════════════════
+
+from l4_kernel.consistency import check_consistency
+
+
+def l4_check_consistency() -> str:
+    """三源一致性校验。"""
+    return json.dumps(check_consistency(), ensure_ascii=False, default=str)
+
+
 # ═════════════════════════════════════════════════════════════════════
 # Config/Tool/Storage/Model/Engine 域操作 (8 tools)
 # ═════════════════════════════════════════════════════════════════════
-
-def l4_config_list(domain_id: str) -> str:
     """列出配置域文件。"""
     from l4_kernel.domain_types import wrap_domain
-    d = _registry.get(domain_id)
+    d = _registry.get(domain_id)  # noqa: F821
     if not d:
-        return _err(f"Domain '{domain_id}' not found")
+        return _err(f"Domain '{domain_id}' not found")  # noqa: F821
     w = wrap_domain(d)
     if hasattr(w, "list_configs"):
         return json.dumps(w.list_configs(), ensure_ascii=False, default=str)
-    return _err(f"Domain '{domain_id}' is not a config domain")
+    return _err(f"Domain '{domain_id}' is not a config domain")  # noqa: F821
 
 
 def l4_config_read(domain_id: str, path: str) -> str:
@@ -526,7 +667,7 @@ TOOLS = {
     "l4_plugin_run_action": l4_plugin_run_action,
     "l4_plugin_run_mechanism": l4_plugin_run_mechanism,
     # Config/Tool/Storage/Model/Engine (8)
-    "l4_config_list": l4_config_list,
+    "l4_config_list": l4_config_list,  # noqa: F821
     "l4_config_read": l4_config_read,
     "l4_tools_list": l4_tools_list,
     "l4_storage_usage": l4_storage_usage,
@@ -562,11 +703,12 @@ def run_stdio():
 def run_http(port: int = 7455):
     """启动 MCP HTTP 服务器。"""
     try:
-        from fastmcp import FastMCP
         import asyncio
+
+        from fastmcp import FastMCP
         mcp = FastMCP("l4-kernel", description="L4 自我层管理面 — 19域统一操作接口")
         _register_tools(mcp)
-        asyncio.run(mcp.run_http_async(host="0.0.0.0", port=port))
+        asyncio.run(mcp.run_http_async(host="0.0.0.0", port=port))  # noqa: S104
     except ImportError:
         print("fastmcp not installed.", file=sys.stderr)
         sys.exit(1)
@@ -575,11 +717,12 @@ def run_http(port: int = 7455):
 def run_sse(port: int = 7456):
     """启动 MCP SSE 服务器。"""
     try:
-        from fastmcp import FastMCP
         import asyncio
+
+        from fastmcp import FastMCP
         mcp = FastMCP("l4-kernel", description="L4 自我层管理面 — 19域统一操作接口")
         _register_tools(mcp)
-        asyncio.run(mcp.run_http_async(transport="sse", host="0.0.0.0", port=port))
+        asyncio.run(mcp.run_http_async(transport="sse", host="0.0.0.0", port=port))  # noqa: S104  # noqa: S104
     except ImportError:
         print("fastmcp not installed.", file=sys.stderr)
         sys.exit(1)

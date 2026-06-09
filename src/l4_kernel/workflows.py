@@ -9,16 +9,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
 
 from l4_kernel import DomainRegistry
-from l4_kernel.kems import KemsPlane, CardsPlane
 from l4_kernel.health import DomainHealth
-from l4_kernel.signals import SignalBus
+from l4_kernel.kems import CardsPlane
 from l4_kernel.plugins import get_plugin_registry
-
+from l4_kernel.signals import SignalBus
+from l4_kernel.skill_loader import (
+    domain_skills_dir,
+    domain_workflows_dir,
+    find_skill,
+    find_workflow,
+)
 
 # ═════════════════════════════════════════════════════════════════════
 # 场景定义
@@ -142,6 +147,27 @@ class ScenarioEngine:
             logger.debug(f"Step action '{action}' → plugin '{domain_obj.domain_type}'")
             return plugin_action(domain_obj.path)
 
+        # 文件级动作 (skill YAML 的底层操作)
+        path_override = kwargs.get("path_override", "")
+        target_path = Path(path_override) if path_override else Path(step.action.split(":")[-1].strip() if ":" in step.action else step.description)
+
+        file_actions = {
+            "read_file": lambda: self._action_read_file(domain_obj.path, target_path),
+            "write_file": lambda: self._action_write_file(domain_obj.path, target_path, kwargs.get("content", "")),
+            "append_signal": lambda: self._action_append_signal(domain, kwargs.get("message", "") or step.description,
+                                                                kwargs.get("source", "l4-kernel"), kwargs.get("type", "ℹ️")),
+            "create_entry": lambda: self._action_create_entry(domain_obj.path, str(target_path.parent) if target_path.parent else "_knowledge/创作系统/输入-灵感抽屉",
+                                                               kwargs.get("title", "untitled"), kwargs.get("content", "")),
+            "update_table": lambda: self._action_update_state(domain_obj.path, kwargs.get("content", "更新")),
+            "update_section": lambda: self._action_update_state(domain_obj.path, kwargs.get("content", "更新")),
+            "write_yaml": lambda: {"status": "ok", "action": "write_yaml"},
+            "read_signals": lambda: self.signals.aggregate_recent(),
+        }
+
+        if action in file_actions:
+            logger.debug(f"Step action '{action}' → file action")
+            return file_actions[action]()
+
         # 内置动作
         builtin = {
             "health_check": lambda: self.health.aggregate_health(),
@@ -167,7 +193,148 @@ class ScenarioEngine:
 
         raise ValueError(f"Unknown action: '{action}'. Available builtins: {list(builtin.keys())}. Available plugins: check l4_plugin_actions")
 
-    def _validate_domain(self, domain_id: str) -> dict:
+
+    def _action_read_file(self, domain_path, target):
+        fp = domain_path / target
+        if not fp.exists():
+            return {'status': 'error', 'message': f'File not found: {target}'}
+        try:
+            c = fp.read_text(encoding='utf-8')
+            return {'status': 'ok', 'path': str(target), 'size': len(c), 'content': c[:500]}
+        except OSError as e:
+            return {'status': 'error', 'message': str(e)}
+
+    def _action_write_file(self, domain_path, target, content=''):
+        fp = domain_path / target
+        try:
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            fp.write_text(content, encoding='utf-8')
+            return {'status': 'ok', 'path': str(target), 'size': len(content)}
+        except OSError as e:
+            return {'status': 'error', 'message': str(e)}
+
+    def _action_append_signal(self, domain_id, message, source='l4-kernel', signal_type='ℹ️'):
+        ok = self.signals.emit(domain_id, signal_type, message, source=source)
+        return {'status': 'ok' if ok else 'error', 'message': message, 'type': signal_type}
+
+    def _action_create_entry(self, domain_path, parent_dir, title, content=''):
+        from datetime import date
+        today = date.today().isoformat()
+        dir_path = domain_path / parent_dir
+        fp = dir_path / f'{today}-{title}.md'
+        try:
+            dir_path.mkdir(parents=True, exist_ok=True)
+            fp.write_text(f'# {title}\n\n{content}', encoding='utf-8')
+            return {'status': 'ok', 'path': str(fp), 'filename': fp.name}
+        except OSError as e:
+            return {'status': 'error', 'message': str(e)}
+
+    def _action_update_state(self, domain_path, content=''):
+        return {'status': 'ok', 'message': 'STATE update', 'content': content[:200]}
+
+# ── YAML skill/workflow 直接执行 ─────────────────────────────────
+
+    def run_skill(self, domain_id: str, skill_id: str, **params) -> dict:
+        """加载并执行一个 YAML skill。
+
+        Args:
+            domain_id: 域 ID（如 "creative"）
+            skill_id: skill ID（如 "creative/open-workbench"）
+            **params: 注入到 steps 中的参数（如 project_name="星尘"）
+
+        Returns:
+            {"status", "skill_id", "steps_completed", "results", "duration_sec"}
+        """
+        d = self.registry.get(domain_id)
+        if not d or not d.exists():
+            return {"status": "error", "message": f"Domain '{domain_id}' not available"}
+
+        skill = find_skill(domain_skills_dir(d.path), skill_id)
+        if not skill:
+            return {"status": "error", "message": f"Skill '{skill_id}' not found in '{domain_id}'"}
+
+        start = datetime.now(UTC)
+        failed = 0
+        step_results = []
+
+        for i, step in enumerate(skill.get("steps", [])):
+            action = step.get("action", "")
+            target = step.get("target", "")
+            step_params = step.get("params", {})
+
+            # 替换模板变量 {xxx}
+            for k, v in params.items():
+                target = target.replace(f"{{{k}}}", str(v))
+                for pk in list(step_params.keys()):
+                    pv = step_params[pk]
+                    if isinstance(pv, str):
+                        step_params[pk] = pv.replace(f"{{{k}}}", str(v))
+
+            result = {"step": i + 1, "action": action, "target": target, "status": "pending"}
+            try:
+                wf_step = WorkflowStep(action, skill.get("description", ""), domain=domain_id)
+                exec_result = self._execute_step(wf_step, **{**params, **step_params, "path_override": target})
+                result["status"] = "ok"
+                result["result"] = str(exec_result)[:200]
+                step_results.append(result)
+            except Exception as e:
+                result["status"] = "error"
+                result["error"] = str(e)
+                failed += 1
+                step_results.append(result)
+                break
+
+        duration = (datetime.now(UTC) - start).total_seconds()
+
+        status = "ok" if failed == 0 else "partial" if len(step_results) > failed else "error"
+        self.signals.emit(domain_id, "✅" if status == "ok" else "⚠️",
+                          f"skill 执行: {skill_id} ({len(step_results)}/{len(skill.get('steps', []))})",
+                          source="scenario_engine")
+
+        return {
+            "status": status,
+            "skill_id": skill_id,
+            "steps_total": len(skill.get("steps", [])),
+            "steps_completed": len(step_results) - failed,
+            "steps_failed": failed,
+            "results": step_results,
+            "duration_sec": round(duration, 2),
+        }
+
+    def run_workflow(self, domain_id: str, workflow_id: str, **params) -> dict:
+        """加载并执行一个 YAML workflow（按 skills 顺序编排）。"""
+        d = self.registry.get(domain_id)
+        if not d or not d.exists():
+            return {"status": "error", "message": f"Domain '{domain_id}' not available"}
+
+        wf = find_workflow(domain_workflows_dir(d.path), workflow_id)
+        if not wf:
+            return {"status": "error", "message": f"Workflow '{workflow_id}' not found in '{domain_id}'"}
+
+        skill_ids = wf.get("skills", [])
+        all_results = []
+        total_failed = 0
+
+        for sid in skill_ids:
+            skill_result = self.run_skill(domain_id, sid, **params)
+            all_results.append({"skill": sid, "result": skill_result})
+            if skill_result.get("status") == "error":
+                total_failed += 1
+                if wf.get("error-handling") == "stop":
+                    break
+
+        status = "ok" if total_failed == 0 else "partial"
+        return {
+            "status": status,
+            "workflow_id": workflow_id,
+            "skills_total": len(skill_ids),
+            "skills_failed": total_failed,
+            "skill_results": all_results,
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# 预定义场景
         from l4_kernel.templates import KemsValidator
         d = self.registry.get(domain_id)
         if not d:

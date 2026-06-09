@@ -45,10 +45,11 @@ class Domain:
         }
 
 
-# ── 内置 19 域默认注册表 (SSOT 回退) ──────────────────────────────
+# ── 内置 20 域默认注册表 (SSOT 回退) ──────────────────────────────
 # 来源: CLAUDE_COWORK_GLOBAL.md v6.0 + L0 MOF M1 domain/DOMAIN-*.yaml
+# 2026-06-09 更新: 新增 creative 域, vault 描述修正
 _BUILTIN_DOMAINS: list[Domain] = [
-    # ── DocumentDomain (7域) ──
+    # ── DocumentDomain (8域) ──
     Domain(
         id="cockpit", name="@驾驶舱", domain_type="document",
         path=Path.home() / "Documents" / "@驾驶舱",
@@ -64,6 +65,14 @@ _BUILTIN_DOMAINS: list[Domain] = [
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
         governance_tier=1,
         capabilities=["knowledge.read", "knowledge.search", "knowledge.archive"],
+    ),
+    Domain(
+        id="creative", name="@创意创作", domain_type="document",
+        path=Path.home() / "Documents" / "@创意创作",
+        bos_uri="bos://creative/**",
+        kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
+        governance_tier=1,
+        capabilities=["knowledge.read", "knowledge.search"],
     ),
     Domain(
         id="personal", name="@个人", domain_type="document",
@@ -88,14 +97,14 @@ _BUILTIN_DOMAINS: list[Domain] = [
         governance_tier=2,
     ),
     Domain(
-        id="work-weijian", name="@卫健委", domain_type="document",
+        id="work-weijian", name="@工作文档/卫健委", domain_type="document",
         path=Path.home() / "Documents" / "@工作文档" / "卫健委",
         bos_uri="bos://work-weijian/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive", "_runtime"],
         governance_tier=2,
     ),
     Domain(
-        id="work-guozhuan", name="@国转中心", domain_type="document",
+        id="work-guozhuan", name="@工作文档/国转中心", domain_type="document",
         path=Path.home() / "Documents" / "@工作文档" / "国转中心",
         bos_uri="bos://work-guozhuan/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive", "_runtime"],

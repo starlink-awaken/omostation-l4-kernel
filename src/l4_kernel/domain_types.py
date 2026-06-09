@@ -9,12 +9,10 @@ import json
 import os
 import subprocess
 from datetime import UTC, datetime
-from pathlib import Path
 
 import yaml
 
 from l4_kernel.registry import Domain
-
 
 # ═════════════════════════════════════════════════════════════════════
 # DocumentDomain — KEMS 六面域

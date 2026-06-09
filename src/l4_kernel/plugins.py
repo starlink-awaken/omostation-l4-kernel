@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from pathlib import Path
+
 """L4 Plugin System — 插件扩展框架。
 
 按域类型自动加载插件，支持 KEMS 业务动作、流程、规范、机制。
@@ -6,28 +10,25 @@
   class L4Plugin:
       domain_type: str          # 适用的域类型
       name: str                 # 插件名称
-      
+
       # 生命周期
       def on_load(self) -> None
       def on_unload(self) -> None
-      
+
       # KEMS 业务动作
       def get_actions(self) -> dict[str, callable]
-      
+
       # KEMS 流程模板
       def get_workflows(self) -> dict[str, dict]
-      
+
       # KEMS 规范
       def get_specifications(self) -> dict[str, dict]
-      
+
       # KEMS 机制
       def get_mechanisms(self) -> dict[str, callable]
 """
 
-from __future__ import annotations
-
-from typing import Any, Protocol
-
+from typing import Protocol
 
 # ═════════════════════════════════════════════════════════════════════
 # 插件接口
@@ -366,10 +367,10 @@ class PluginRegistry:
         # 加载 6 种域类型插件
         from l4_kernel.domain_plugins import (
             ConfigDomainPlugin,
-            ToolDomainPlugin,
             EngineDomainPlugin,
-            StorageDomainPlugin,
             ModelDomainPlugin,
+            StorageDomainPlugin,
+            ToolDomainPlugin,
             WorkspaceDomainPlugin,
         )
         self.register(ConfigDomainPlugin())

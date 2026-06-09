@@ -12,7 +12,6 @@ import fcntl
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
 
 
 class ConcurrencyManager:
@@ -51,7 +50,7 @@ class ConcurrencyManager:
                 f = open(filepath, "a")
                 fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
-            except (IOError, OSError):
+            except OSError:
                 if f:
                     f.close()
                 if time.time() - start > timeout:
@@ -75,10 +74,10 @@ class ConcurrencyManager:
         start = time.time()
         while True:
             try:
-                f = open(filepath, "r")
+                f = open(filepath)
                 fcntl.flock(f, fcntl.LOCK_SH | fcntl.LOCK_NB)
                 break
-            except (IOError, OSError):
+            except OSError:
                 if f:
                     f.close()
                 if time.time() - start > timeout:

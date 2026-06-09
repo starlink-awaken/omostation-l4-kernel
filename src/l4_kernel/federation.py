@@ -10,14 +10,12 @@
 from __future__ import annotations
 
 import json
-import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from l4_kernel.registry import Domain, DomainRegistry
-
+from l4_kernel.registry import DomainRegistry
 
 # ═════════════════════════════════════════════════════════════════════
 # 数据模型

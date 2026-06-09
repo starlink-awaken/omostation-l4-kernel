@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd \\\"/Users/xiamingxing/Workspace\\\" && cat projects/l4-kernel/src/l4_kernel/__init__.py 2>/dev/null && echo \\\"---\\\" && grep -nE \\\"def main|cmd_health\\\" projects/l4-kernel/src/l4_kernel/__i...",
-  "error": "Exit code 1\n\"\"\"L4 Kernel — 自我层管理面公共 API。\"\"\"\n\nfrom l4_kernel.registry import Domain, DomainRegistry\n\n__all__ = [\"Domain\", \"DomainRegistry\"]\n__version__ = \"0.1.0\"\n---\n---",
-  "timestamp": "2026-06-08T12:22:57.764Z",
+  "tool_input_preview": "{\"command\":\"cd projects/l4-kernel && PYTHONPATH=src:../model-driven/src .venv/bin/python -c \\\"\\nfrom l4_kernel.lifecycle import DomainLifecycle\\ndl = DomainLifecycle(domain_id='test-domain')\\n# Test c...",
+  "error": "Exit code 1\n(eval):cd:1: no such file or directory: projects/l4-kernel",
+  "timestamp": "2026-06-09T02:33:35.448Z",
   "retry_count": 1
 }

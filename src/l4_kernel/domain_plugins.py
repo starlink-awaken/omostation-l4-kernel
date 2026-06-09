@@ -8,9 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from l4_kernel.registry import Domain
-
-
 # ═════════════════════════════════════════════════════════════════════
 # ConfigDomainPlugin — 配置域操作
 # ═════════════════════════════════════════════════════════════════════
@@ -200,6 +197,7 @@ class ToolDomainPlugin:
 
     def _action_tool_deprecation_scan(self, domain_path: Path) -> dict:
         from datetime import UTC, datetime
+
         from l4_kernel.domain_types import ToolDomain
         d = ToolDomain(
             id="temp", name="temp", domain_type="tool",
@@ -300,7 +298,7 @@ class EngineDomainPlugin:
         if not config_file.exists():
             return {"action": "engine_config_rotate", "status": "no_config"}
         import shutil
-        backup = domain_path / f"config.yaml.bak"
+        backup = domain_path / "config.yaml.bak"
         shutil.copy2(config_file, backup)
         return {"action": "engine_config_rotate", "status": "ok", "backup": str(backup)}
 
@@ -311,7 +309,7 @@ class EngineDomainPlugin:
             path=domain_path, bos_uri="bos://temp/**",
         )
         logs = d.get_logs(lines=50)
-        errors = [l for l in logs if "error" in l.lower() or "exception" in l.lower() or "traceback" in l.lower()]
+        errors = [_ for _ in logs if "error" in _.lower() or "exception" in _.lower() or "traceback" in _.lower()]
         return {
             "action": "engine_log_analyze",
             "total_lines": len(logs),

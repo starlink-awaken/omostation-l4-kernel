@@ -10,10 +10,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import Path
 
-from l4_kernel.registry import Domain, DomainRegistry
 from l4_kernel.kems import KemsPlane
+from l4_kernel.registry import Domain, DomainRegistry
 from l4_kernel.templates import KemsValidator
 
 
@@ -80,7 +79,6 @@ class DomainHealth:
         validator = KemsValidator(domain.path)
         violations = validator.validate_all()
         errors = [v for v in violations if v["severity"] == "error"]
-        warnings = [v for v in violations if v["severity"] == "warning"]
         health["violations"] = len(violations)
         health["violation_details"] = violations[:10]
         health["kems_valid"] = len(errors) == 0
@@ -293,20 +291,20 @@ class DomainHealth:
         health = self.aggregate_health()
         lines = [
             "# L4 全域健康 DASHBOARD",
-            f"",
+            "",
             f"> 更新时间: {health['timestamp']}",
-            f"",
-            f"## 总览",
-            f"",
+            "",
+            "## 总览",
+            "",
             f"- **总计**: {health['total']} 域",
             f"- **存在**: {health['existing']} 域",
             f"- **缺失**: {health['missing']} 域",
             f"- **健康率**: {health['health_rate']}",
-            f"",
-            f"## 按类型",
-            f"",
-            f"| 类型 | 存在/总数 | 状态 |",
-            f"|------|----------|------|",
+            "",
+            "## 按类型",
+            "",
+            "| 类型 | 存在/总数 | 状态 |",
+            "|------|----------|------|",
         ]
         for t, s in health["by_type"].items():
             icon = "✅" if s["missing"] == 0 else "⚠️"

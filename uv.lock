@@ -25,6 +25,7 @@ name = "l4-kernel"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "model-driven" },
     { name = "pyyaml" },
 ]
 
@@ -32,6 +33,23 @@ dependencies = [
 dev = [
     { name = "pytest" },
     { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "model-driven", editable = "../model-driven" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
+]
+provides-extras = ["dev"]
+
+[[package]]
+name = "model-driven"
+version = "0.1.0"
+source = { editable = "../model-driven" }
+dependencies = [
+    { name = "pyyaml" },
 ]
 
 [package.metadata]

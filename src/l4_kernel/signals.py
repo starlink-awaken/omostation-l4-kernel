@@ -10,8 +10,16 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from l4_kernel.registry import DomainRegistry
 from l4_kernel.kems import KemsPlane
+from l4_kernel.registry import DomainRegistry
+
+# model-driven 桥接 (可选依赖)
+try:
+    from model_driven.management.omo_bridge import OMOBridge
+    _MD_BRIDGE = OMOBridge()
+except ImportError:
+    OMOBridge = None  # type: ignore
+    _MD_BRIDGE = None
 
 SignalType = Literal["✅", "⚠️", "🔴", "ℹ️"]
 
@@ -229,6 +237,14 @@ class SignalBus:
             msgs = [e["message"] for e in errors]
             self.emit(domain_id, "🔴", f"Schema violations: {'; '.join(msgs[:3])}",
                       source="KemsValidator")
+            # OMO 桥接: 严重违规自动注册债务
+            if _MD_BRIDGE:
+                for e in errors:
+                    _MD_BRIDGE.register_debt_and_persist(
+                        title=f"Schema violation: {domain_id}",
+                        description=e["message"],
+                        severity="high",
+                    )
         elif warnings:
             msgs = [w["message"] for w in warnings[:3]]
             self.emit(domain_id, "⚠️", f"Schema warnings: {'; '.join(msgs)}",

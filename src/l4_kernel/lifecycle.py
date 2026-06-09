@@ -10,15 +10,29 @@
 
 from __future__ import annotations
 
-import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from l4_kernel.registry import Domain, DomainRegistry
-from l4_kernel.templates import init_domain_kems, KemsValidator
 from l4_kernel.kems import KemsPlane
+from l4_kernel.registry import Domain, DomainRegistry
 from l4_kernel.signals import SignalBus
+from l4_kernel.templates import KemsValidator, init_domain_kems
+
+# model-driven 桥接 (可选依赖，导入失败时降级)
+try:
+    from model_driven.lifecycle import LifecycleManager
+    from model_driven.lifecycle.pipeline import PipelinePhase, PipelineTracker
+    from model_driven.mof.m3_extended import LifecycleStage
+    from model_driven.toolchain.derivation_engine import DerivationEngine
+    _MD_AVAILABLE = True
+except ImportError:
+    LifecycleManager = None  # type: ignore
+    LifecycleStage = None  # type: ignore
+    PipelineTracker = None  # type: ignore
+    PipelinePhase = None  # type: ignore
+    DerivationEngine = None  # type: ignore
+    _MD_AVAILABLE = False
 
 DomainStatus = Literal["proposed", "active", "degraded", "frozen", "archived", "removed", "rejected"]
 
@@ -281,8 +295,10 @@ class DomainLifecycle:
             # 确保 5 核心文件存在 (按需创建, 不覆盖已有)
             control = domain.path / "_control"
             from l4_kernel.templates import (
-                MEMORY_TEMPLATE, STATUS_TEMPLATE, SIGNALS_TEMPLATE,
                 CONTROL_RULES_TEMPLATE,
+                MEMORY_TEMPLATE,
+                SIGNALS_TEMPLATE,
+                STATUS_TEMPLATE,
             )
             today = datetime.now(UTC).strftime("%Y-%m-%d")
             params = {"domain_name": domain.name, "owner": "migrated", "created": today,
@@ -317,13 +333,191 @@ class DomainLifecycle:
         """生成域健康报告。
 
         如果 domain_id 为空，返回所有域的聚合报告。
+        如果 model-driven 可用，额外包含生命周期追踪 + 推导结果 + Pipeline 进度。
         """
         if domain_id:
-            return self.validate(domain_id)
+            result = self.validate(domain_id)
+            if _MD_AVAILABLE:
+                result["lifecycle_tracking"] = self._get_md_lifecycle_status(domain_id)
+                result["derivation"] = self._run_derivation_for_domain(domain_id)
+            return result
 
         from l4_kernel.health import DomainHealth
         health = DomainHealth(self.registry)
-        return health.aggregate_health()
+        report = health.aggregate_health()
+
+        # model-driven 桥接: 生命周期仪表板 + 推导 + Pipeline
+        if _MD_AVAILABLE:
+            report["lifecycle_dashboard"] = self._get_md_dashboard()
+            report["derivation"] = self._run_derivation_all()
+            report["pipeline"] = self._get_md_pipeline_summary()
+
+        return report
+
+    # ── model-driven 桥接方法 ────────────────────────────────────────
+
+    def _get_md_lifecycle_status(self, domain_id: str) -> dict | None:
+        """从 model-driven 获取域的生命周期状态"""
+        if not _MD_AVAILABLE:
+            return None
+        try:
+            mgr = LifecycleManager()
+            summary = mgr.get_stage_summary(domain_id)
+            return summary
+        except Exception:
+            return None
+
+    def _get_md_dashboard(self) -> dict | None:
+        """从 model-driven 获取生命周期仪表板"""
+        if not _MD_AVAILABLE:
+            return None
+        try:
+            mgr = LifecycleManager()
+            dashboard = mgr.generate_dashboard()
+            return {
+                "total_entities": dashboard.total_entities,
+                "by_stage": dashboard.entities_by_stage,
+                "blockers": dashboard.blockers,
+                "avg_progress": dashboard.avg_progress,
+            }
+        except Exception:
+            return None
+
+    def track_domain_lifecycle(self, domain_id: str, entity_type: str = "domain") -> dict:
+        """在 model-driven 中创建域的完整生命周期追踪"""
+        if not _MD_AVAILABLE:
+            return {"status": "error", "message": "model-driven 不可用"}
+
+        try:
+            mgr = LifecycleManager()
+            mgr.create_tracker(domain_id, entity_type)
+            return {"status": "ok", "message": f"已为 {domain_id} 创建生命周期追踪"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def advance_domain_stage(self, domain_id: str, target_stage: str) -> dict:
+        """推进域的生命周期阶段"""
+        if not _MD_AVAILABLE:
+            return {"status": "error", "message": "model-driven 不可用"}
+
+        try:
+            from model_driven.lifecycle.transitions import TransitionEngine
+
+            mgr = LifecycleManager()
+            tracker = mgr.get_tracker(domain_id)
+            if not tracker:
+                tracker = mgr.create_tracker(domain_id, "domain")
+
+            target = LifecycleStage.from_str(target_stage)
+            engine = TransitionEngine()
+            success, msg, _ = engine.try_transition(tracker, target)
+
+            return {
+                "status": "ok" if success else "error",
+                "message": msg,
+                "current_stage": tracker.current_stage.value if tracker.current_stage else None,
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def create_domain_pipeline(self, domain_id: str) -> dict:
+        """为域创建三阶段宏观流水线追踪"""
+        if not _MD_AVAILABLE:
+            return {"status": "error", "message": "model-driven 不可用"}
+
+        try:
+            pt = PipelineTracker(entity_id=domain_id, entity_type="domain")
+            pt.start_phase(PipelinePhase.COLD_START)
+            return {
+                "status": "ok",
+                "message": f"已为 {domain_id} 创建三阶段流水线 (当前: ColdStart)",
+                "pipeline": pt.get_progress(),
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def _run_derivation_for_domain(self, domain_id: str) -> dict | None:
+        """对单个域运行推导规则"""
+        if not _MD_AVAILABLE:
+            return None
+        try:
+            # 加载该域的 M1 节点
+            from pathlib import Path
+
+            import yaml
+
+            domain = self.registry.get(domain_id)
+            if not domain:
+                return {"error": f"域 {domain_id} 不存在"}
+
+            # 从 L0 M1 加载相关节点
+            m1_dir = Path.home() / "Workspace" / "projects" / "ecos" / "src" / "ecos" / "ssot" / "mof" / "m1"
+            nodes = []
+            for d in sorted(m1_dir.iterdir()):
+                if d.is_dir():
+                    for f in sorted(d.glob("*.yaml")):
+                        try:
+                            data = yaml.safe_load(open(f))
+                            if data and "type" in data:
+                                nodes.append(data)
+                        except Exception:
+                            pass
+
+            engine = DerivationEngine()
+            engine.execute_all(nodes)
+            summary = engine.get_summary()
+            return summary
+        except Exception:
+            return None
+
+    def _run_derivation_all(self) -> dict | None:
+        """对所有域运行推导规则"""
+        if not _MD_AVAILABLE:
+            return None
+        try:
+            from pathlib import Path
+
+            import yaml
+
+            m1_dir = Path.home() / "Workspace" / "projects" / "ecos" / "src" / "ecos" / "ssot" / "mof" / "m1"
+            nodes = []
+            for d in sorted(m1_dir.iterdir()):
+                if d.is_dir():
+                    for f in sorted(d.glob("*.yaml")):
+                        try:
+                            data = yaml.safe_load(open(f))
+                            if data and "type" in data:
+                                nodes.append(data)
+                        except Exception:
+                            pass
+
+            engine = DerivationEngine()
+            engine.execute_all(nodes)
+            return engine.get_summary()
+        except Exception:
+            return None
+
+    def _get_md_pipeline_summary(self) -> dict | None:
+        """获取所有域的 Pipeline 汇总"""
+        if not _MD_AVAILABLE:
+            return None
+        try:
+            mgr = LifecycleManager()
+            pipelines = {}
+            for entity_id in mgr.list_entities():
+                pt = PipelineTracker(entity_id=entity_id)
+                pipelines[entity_id] = pt.get_progress()
+            return {
+                "total": len(pipelines),
+                "by_phase": {
+                    "cold_start": sum(1 for p in pipelines.values() if p["current_phase"] == "cold_start"),
+                    "evolution": sum(1 for p in pipelines.values() if p["current_phase"] == "evolution"),
+                    "hardening": sum(1 for p in pipelines.values() if p["current_phase"] == "hardening"),
+                },
+                "pipelines": pipelines,
+            }
+        except Exception:
+            return None
 
     # ── 批量操作 ────────────────────────────────────────────────────
 

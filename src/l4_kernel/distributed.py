@@ -7,13 +7,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
-from l4_kernel.registry import DomainRegistry
-from l4_kernel.federation import FederationHub, PeerNode, FederatedDomain
+from l4_kernel.federation import FederationHub
 from l4_kernel.health import DomainHealth
+from l4_kernel.registry import DomainRegistry
 from l4_kernel.signals import SignalBus
-from l4_kernel.kems import KemsPlane
 
 
 class DistributedScenarioEngine:
@@ -305,20 +303,20 @@ class DistributedScenarioEngine:
         status = self.aggregate_federation_health()
         lines = [
             "# L4 联邦 DASHBOARD",
-            f"",
+            "",
             f"> 节点: {status['node_id']}",
             f"> 更新时间: {status['timestamp']}",
-            f"",
-            f"## 节点状态",
+            "",
+            "## 节点状态",
             f"- 总计: {status['nodes']['total']}",
             f"- 健康: {status['nodes']['healthy']}",
             f"- 不可达: {status['nodes']['unreachable']}",
-            f"",
-            f"## 联邦域",
+            "",
+            "## 联邦域",
             f"- 联邦域数: {status['domains']['federated']}",
             f"- 已同步: {status['domains']['synced']}",
-            f"",
-            f"## 对等节点",
+            "",
+            "## 对等节点",
         ]
         for nid, peer in self.hub.peers.items():
             h = self.hub.check_peer_health(nid)

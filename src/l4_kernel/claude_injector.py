@@ -9,15 +9,12 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
-from pathlib import Path
 
-from l4_kernel.registry import Domain, DomainRegistry
-
+from l4_kernel.registry import DomainRegistry
 
 # ── Schema 约束注入模板 ──────────────────────────────────────────
 
-SCHEMA_INJECTION = """
+SCHEMA_INJECTION = r"""
 ## §0.1 控制面强制规范 (l4-kernel Schema)
 
 修改以下文件时，必须遵守:
