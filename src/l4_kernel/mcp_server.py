@@ -666,8 +666,7 @@ TOOLS = {
     "l4_plugin_specs": l4_plugin_specs,
     "l4_plugin_run_action": l4_plugin_run_action,
     "l4_plugin_run_mechanism": l4_plugin_run_mechanism,
-    # Config/Tool/Storage/Model/Engine (8)
-    "l4_config_list": l4_config_list,  # noqa: F821
+    # Config/Tool/Storage/Model/Engine (7)
     "l4_config_read": l4_config_read,
     "l4_tools_list": l4_tools_list,
     "l4_storage_usage": l4_storage_usage,
