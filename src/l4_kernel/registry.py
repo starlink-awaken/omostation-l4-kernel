@@ -46,6 +46,11 @@ class Domain:
 
 
 # ── 内置 24 域默认注册表 (SSOT 回退) ──────────────────────────────
+# ⚠️ 新增域需同时更新三处:
+#  1. 此处 _BUILTIN_DOMAINS (l4-kernel 注册表)
+#  2. DOMAIN-INDEX.md (L4 域注册表)
+#  3. agora POC_SERVICES (BOS 路由)
+# 测试: tests/test_registry.py (动态断言自动适配)
 # 来源: CLAUDE_COWORK_GLOBAL.md v6.0 + L0 MOF M1 domain/DOMAIN-*.yaml
 # 2026-06-10 更新: 新增 opc/family-shared 域, ID 对齐 DOMAIN-INDEX
 _BUILTIN_DOMAINS: list[Domain] = [
