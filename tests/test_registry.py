@@ -34,15 +34,15 @@ class TestDomain:
 
 
 class TestDomainRegistry:
-    def test_list_all_returns_21_domains(self):
+    def test_list_all_returns_24_domains(self):
         reg = DomainRegistry()
         all_d = reg.list_all()
-        assert len(all_d) == 21, f"Expected 21 domains, got {len(all_d)}: {[d.id for d in all_d]}"
+        assert len(all_d) == 24, f"Expected 24 domains, got {len(all_d)}: {[d.id for d in all_d]}"
 
     def test_list_by_type_document(self):
         reg = DomainRegistry()
         docs = reg.list_by_type("document")
-        assert len(docs) == 8
+        assert len(docs) == 11  # 8 original + obsidian-vault + opc + family-shared
 
     def test_list_by_type_config(self):
         reg = DomainRegistry()
@@ -52,7 +52,7 @@ class TestDomainRegistry:
     def test_list_by_type_engine(self):
         reg = DomainRegistry()
         engines = reg.list_by_type("engine")
-        assert len(engines) == 3  # minerva + knowledge + l4-kernel
+        assert len(engines) == 3  # minerva + knowledge-engine + l4-kernel
 
     def test_list_by_type_workspace(self):
         reg = DomainRegistry()
@@ -111,19 +111,19 @@ class TestDomainRegistry:
     def test_aggregate_health(self):
         reg = DomainRegistry()
         h = reg.aggregate_health()
-        assert h["total"] == 21
+        assert h["total"] == 24
         assert "document" in h["by_type"]
 
     def test_to_dict(self):
         reg = DomainRegistry()
         d = reg.to_dict()
-        assert len(d["domains"]) == 21
+        assert len(d["domains"]) == 24
         assert "health" in d
 
     def test_list_document_domains(self):
         reg = DomainRegistry()
         docs = reg.list_document_domains()
-        assert len(docs) == 8  # 7 original + obsidian-vault
+        assert len(docs) == 11  # 8 original + obsidian-vault + opc + family-shared
         assert all(d.domain_type == "document" for d in docs)
 
     def test_work_weijian_path(self):

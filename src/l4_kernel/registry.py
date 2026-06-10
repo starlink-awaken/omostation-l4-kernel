@@ -1,4 +1,4 @@
-"""L4 Domain Registry — 19域统一注册表。
+"""L4 Domain Registry — 24域统一注册表。
 
 SSOT: ~/Documents/驾驶舱/CARDS/DOMAIN-INDEX.md (如果不存在则使用硬编码默认值)
 与 L0 MOF M1 domain/DOMAIN-*.yaml 互补: Registry 管理文件系统路径, MOF 管理语义模型。
@@ -45,9 +45,9 @@ class Domain:
         }
 
 
-# ── 内置 20 域默认注册表 (SSOT 回退) ──────────────────────────────
+# ── 内置 24 域默认注册表 (SSOT 回退) ──────────────────────────────
 # 来源: CLAUDE_COWORK_GLOBAL.md v6.0 + L0 MOF M1 domain/DOMAIN-*.yaml
-# 2026-06-09 更新: 新增 creative 域, vault 描述修正
+# 2026-06-10 更新: 新增 opc/family-shared 域, ID 对齐 DOMAIN-INDEX
 _BUILTIN_DOMAINS: list[Domain] = [
     # ── DocumentDomain (8域) ──
     Domain(
@@ -133,9 +133,9 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://bin/**",
     ),
     Domain(
-        id="toolbox", name="~/ToolBox", domain_type="tool",
+        id="toolbox-tools", name="~/ToolBox", domain_type="tool",
         path=Path.home() / "ToolBox",
-        bos_uri="bos://toolbox/**",
+        bos_uri="bos://toolbox-tools/**",
     ),
     # ── WorkspaceDomain (1域) ──
     Domain(
@@ -167,9 +167,9 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://minerva/**",
     ),
     Domain(
-        id="knowledge", name="Knowledge 引擎", domain_type="engine",
+        id="knowledge-engine", name="Knowledge 引擎", domain_type="engine",
         path=Path.home() / "knowledge",
-        bos_uri="bos://knowledge/**",
+        bos_uri="bos://knowledge-engine/**",
     ),
     # ── Obsidian Vault (DocumentDomain) ──
     Domain(
@@ -178,6 +178,23 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://obsidian-vault/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
         governance_tier=3,
+    ),
+    # ── OPC (DocumentDomain, 新增 2026-06-10) ──
+    Domain(
+        id="opc", name="@OPC", domain_type="document",
+        path=Path.home() / "Documents" / "@OPC",
+        bos_uri="bos://opc/**",
+        kems_planes=["_control", "_entities", "_knowledge", "_storage"],
+        governance_tier=1,
+        capabilities=["knowledge.read", "knowledge.search"],
+    ),
+    # ── FamilyShared (DocumentDomain) ──
+    Domain(
+        id="family-shared", name="FamilyShared", domain_type="document",
+        path=Path.home() / "Documents" / "FamilyShared",
+        bos_uri="bos://family-shared/**",
+        kems_planes=["_control", "_entities", "_knowledge", "_storage"],
+        governance_tier=2,
     ),
     # ── L4 Kernel (EngineDomain) ──
     Domain(
