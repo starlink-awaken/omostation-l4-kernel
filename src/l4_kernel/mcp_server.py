@@ -691,7 +691,7 @@ def run_stdio():
     """启动 MCP stdio 服务器。"""
     try:
         from fastmcp import FastMCP
-        mcp = FastMCP("l4-kernel", description="L4 自我层管理面 — 19域统一操作接口")
+        mcp = FastMCP("l4-kernel")
         _register_tools(mcp)
         mcp.run(transport="stdio")
     except ImportError:
@@ -705,7 +705,7 @@ def run_http(port: int = 7455):
         import asyncio
 
         from fastmcp import FastMCP
-        mcp = FastMCP("l4-kernel", description="L4 自我层管理面 — 19域统一操作接口")
+        mcp = FastMCP("l4-kernel")
         _register_tools(mcp)
         asyncio.run(mcp.run_http_async(host="0.0.0.0", port=port))  # noqa: S104
     except ImportError:
@@ -719,7 +719,7 @@ def run_sse(port: int = 7456):
         import asyncio
 
         from fastmcp import FastMCP
-        mcp = FastMCP("l4-kernel", description="L4 自我层管理面 — 19域统一操作接口")
+        mcp = FastMCP("l4-kernel")
         _register_tools(mcp)
         asyncio.run(mcp.run_http_async(transport="sse", host="0.0.0.0", port=port))  # noqa: S104  # noqa: S104
     except ImportError:
