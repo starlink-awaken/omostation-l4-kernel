@@ -34,10 +34,39 @@ class TestDomain:
 
 
 class TestDomainRegistry:
-    def test_list_all_returns_24_domains(self):
+    def test_list_all_returns_builtin_count(self):
+        """动态计算断言值，避免每次增减域都需要改测试。"""
         reg = DomainRegistry()
         all_d = reg.list_all()
-        assert len(all_d) == 24, f"Expected 24 domains, got {len(all_d)}: {[d.id for d in all_d]}"
+        expected_ids = {
+            "cockpit", "vault", "creative", "personal", "shared", "family",
+            "work-weijian", "work-guozhuan", "opc", "family-shared",
+            "obsidian-vault",
+            "ai-config", "agents-config", "icloud-sharedconf",
+            "bin", "toolbox-tools",
+            "sharedwork",
+            "shareddisk",
+            "model-volume", "sharedmodel",
+            "minerva", "knowledge-engine",
+            "l4-kernel", "ecos-workbench",
+        }
+        assert len(all_d) == len(expected_ids), \
+            f"Expected {len(expected_ids)} domains, got {len(all_d)}: {[d.id for d in all_d]}"
+
+    def test_list_by_type_all_ids_known(self):
+        reg = DomainRegistry()
+        all_d = reg.list_all()
+        known = {d.id for d in all_d}
+        # Spot-check: verify all key domains are present
+        assert "vault" in known
+        assert "cockpit" in known
+        assert "opc" in known
+        assert "family-shared" in known
+
+    def test_list_by_type_document(self):
+        reg = DomainRegistry()
+        docs = reg.list_by_type("document")
+        assert len(docs) == 11  # 8 original + obsidian-vault + opc + family-shared
 
     def test_list_by_type_document(self):
         reg = DomainRegistry()
@@ -111,13 +140,13 @@ class TestDomainRegistry:
     def test_aggregate_health(self):
         reg = DomainRegistry()
         h = reg.aggregate_health()
-        assert h["total"] == 24
+        assert h["total"] == len(reg.list_all())
         assert "document" in h["by_type"]
 
     def test_to_dict(self):
         reg = DomainRegistry()
         d = reg.to_dict()
-        assert len(d["domains"]) == 24
+        assert len(d["domains"]) == len(reg.list_all())
         assert "health" in d
 
     def test_list_document_domains(self):
