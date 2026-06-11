@@ -65,7 +65,7 @@ class TestDomainValidate:
 
     def test_validate_all(self, lifecycle):
         results = lifecycle.validate_all()
-        assert len(results) == 21
+        assert len(results) == 24
         assert "vault" in results
 
 

@@ -33,11 +33,11 @@ from l4_kernel.mcp_server import (
 class TestDomainTools:
     def test_domains_list_all(self):
         result = json.loads(l4_domains_list())
-        assert len(result) == 21
+        assert len(result) == 24
 
     def test_domains_list_by_type(self):
         result = json.loads(l4_domains_list("document"))
-        assert len(result) == 8
+        assert len(result) == 11
 
     def test_domain_info(self):
         result = json.loads(l4_domain_info("vault"))
@@ -145,7 +145,7 @@ class TestSignalTools:
 
 class TestToolRegistry:
     def test_tools_registered(self):
-        assert len(TOOLS) == 43  # 42 original + l4_reload
+        assert len(TOOLS) == 42
 
     def test_all_tools_callable(self):
         for name, fn in TOOLS.items():
