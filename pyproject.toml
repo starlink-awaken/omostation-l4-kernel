@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "l4-kernel"
-version = "0.1.0"
+version = "1.0.0"
 description = "L4 Domain Kernel — 自我层管理面：19域统一注册 + KEMS六面操作 + 健康聚合"
 readme = "README.md"
 requires-python = ">=3.13"
