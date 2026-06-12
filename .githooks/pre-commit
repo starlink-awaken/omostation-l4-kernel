@@ -1,0 +1,16 @@
+#!/bin/bash
+# Pre-commit hook: ruff check
+set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+REPO_NAME=$(basename "$REPO_ROOT")
+
+echo "🔍 Pre-commit: $REPO_NAME"
+
+# Ruff check on staged Python files
+STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM -- '*.py' 2>/dev/null | grep -v "__pycache__" | grep -v ".venv" || true)
+if [ -n "$STAGED_PY" ] && command -v ruff &>/dev/null; then
+    ruff check $STAGED_PY 2>&1 || { echo "❌ ruff check failed"; exit 1; }
+fi
+
+echo "✅ Pre-commit check complete"
