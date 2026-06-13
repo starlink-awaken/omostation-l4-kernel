@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from l4_kernel.federation import FederationHub, PeerNode
 from l4_kernel.distributed import DistributedScenarioEngine
+from l4_kernel.federation import FederationHub, PeerNode
 
 
 @pytest.fixture

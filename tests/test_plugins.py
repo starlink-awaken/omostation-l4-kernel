@@ -1,8 +1,7 @@
 """Tests for L4 Kernel Plugin System."""
 
-from pathlib import Path
 
-from l4_kernel.plugins import DocumentKemsPlugin, PluginRegistry, get_plugin_registry
+from l4_kernel.plugins import DocumentKemsPlugin, get_plugin_registry
 
 
 class TestDocumentKemsPlugin:

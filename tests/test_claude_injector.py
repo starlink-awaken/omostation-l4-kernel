@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from l4_kernel.claude_injector import ClaudeInjector, check_injection_status
 from l4_kernel.registry import Domain, DomainRegistry
-from l4_kernel.claude_injector import ClaudeInjector, check_injection_status, inject_all_domains
 from l4_kernel.templates import init_domain_kems
 
 

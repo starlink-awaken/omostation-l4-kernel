@@ -1,8 +1,12 @@
 """Tests for L4 Kernel Workflow Scenario Engine."""
 
 from l4_kernel.workflows import (
-    SCENARIOS, ScenarioEngine, Workflow, WorkflowStep,
-    list_scenarios, run_scenario,
+    SCENARIOS,
+    ScenarioEngine,
+    Workflow,
+    WorkflowStep,
+    list_scenarios,
+    run_scenario,
 )
 
 

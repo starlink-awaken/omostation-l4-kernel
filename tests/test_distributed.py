@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from l4_kernel.concurrency import ConcurrencyManager
-from l4_kernel.federation import FederationHub, PeerNode, FederatedDomain
+from l4_kernel.federation import FederatedDomain, FederationHub, PeerNode
 
 
 class TestConcurrencyManager:

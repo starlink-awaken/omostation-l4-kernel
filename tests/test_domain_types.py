@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from l4_kernel.registry import Domain, DomainRegistry
 from l4_kernel.domain_types import (
     ConfigDomain,
     DocumentDomain,
@@ -17,6 +16,7 @@ from l4_kernel.domain_types import (
     clear_wrap_cache,
     wrap_domain,
 )
+from l4_kernel.registry import Domain, DomainRegistry
 
 
 @pytest.fixture
@@ -258,7 +258,6 @@ class TestEngineDomain:
 
 class TestWrapDomain:
     def test_wrap_document(self):
-        from l4_kernel.domain_types import clear_wrap_cache
         clear_wrap_cache()
         d = Domain(id="v", name="V", domain_type="document", path=Path("/tmp"), bos_uri="bos://v/**")
         wrapped = wrap_domain(d)
@@ -279,7 +278,6 @@ class TestWrapDomain:
         assert isinstance(wrapped, ToolDomain)
 
     def test_wrap_all_types_from_registry(self):
-        from l4_kernel.domain_types import clear_wrap_cache
         clear_wrap_cache()
         reg = DomainRegistry()
         for domain in reg.list_all():
