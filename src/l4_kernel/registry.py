@@ -184,14 +184,24 @@ _BUILTIN_DOMAINS: list[Domain] = [
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
         governance_tier=3,
     ),
-    # ── OPC (DocumentDomain, 新增 2026-06-10) ──
+    # ── OPC (DocumentDomain, 新增 2026-06-10, 2026-06-13 P5-P7 self-correction 扩展) ──
     Domain(
         id="opc", name="@OPC", domain_type="document",
         path=Path.home() / "Documents" / "@OPC",
         bos_uri="bos://opc/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage"],
         governance_tier=1,
-        capabilities=["knowledge.read", "knowledge.search"],
+        capabilities=[
+            "knowledge.read", "knowledge.search",
+            # 2026-06-13 OPC P5-P7 self-correction 闭环后新增:
+            "cadence.cron_wrapper",          # 注入 INVOCATION_ID+OPC_TRIGGER
+            "cadence.fcntl_flock",           # 互斥写 *.index.json
+            "cadence.opc_mode_env",          # OPC_MODE 透传
+            "cadence.semantic_time_env",     # OPC_GENERATED_AT/OPC_TODAY 覆盖
+            "drift.self_evolve_planned_only",# self-evolution 任务仅落 planned/ + approval_required=true
+            "audit.5repos_section17",        # .omo/_delivery/audit-rollout/{date}-5repos.json
+            "audit.8_field_review_template", # .omo/standards/opc-review-template.md
+        ],
     ),
     # ── FamilyShared (DocumentDomain) ──
     Domain(
