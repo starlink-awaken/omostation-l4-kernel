@@ -535,7 +535,7 @@ wheels = [
 
 [[package]]
 name = "l4-kernel"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "model-driven" },
@@ -613,7 +613,7 @@ wheels = [
 
 [[package]]
 name = "model-driven"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "../model-driven" }
 dependencies = [
     { name = "fastmcp" },
