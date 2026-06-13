@@ -58,20 +58,21 @@ def load_domain_index() -> list[dict[str, str]] | None:
     domains = []
     in_table = False
     for line in lines:
-        if line.startswith("|---"):
+        line = line.strip()
+        if not line:
+            in_table = False
+            continue
+        if line.startswith("|") and "---" in line and not in_table:
             in_table = True
             continue
-        if not in_table or not line.startswith("|"):
-            if in_table and "|" not in line:
-                break  # 表格结束
-            continue
-        cells = [c.strip() for c in line.split("|")]
-        if len(cells) >= 5 and cells[1] and cells[2]:
-            domains.append({
-                "id": cells[1],
-                "name": cells[2].replace("@", ""),
-                "path": cells[4],
-            })
+        if in_table and line.startswith("|") and "---" not in line:
+            cells = [c.strip() for c in line.split("|")]
+            if len(cells) >= 5 and cells[1] and cells[2]:
+                domains.append({
+                    "id": cells[1],
+                    "name": cells[2].replace("@", ""),
+                    "path": cells[4],
+                })
     return domains
 
 

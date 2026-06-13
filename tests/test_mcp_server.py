@@ -1,39 +1,35 @@
 """Tests for L4 Kernel MCP Server tools."""
 
 import json
-import tempfile
-from pathlib import Path
-
-import pytest
 
 from l4_kernel.mcp_server import (
-    l4_domains_list,
+    TOOLS,
+    l4_cards_list,
+    l4_claude_validate,
+    l4_cross_search,
+    l4_dashboard,
     l4_domain_info,
     l4_domain_validate,
-    l4_state_read,
-    l4_memory_read,
-    l4_signals_list,
-    l4_status_read,
-    l4_search,
-    l4_cross_search,
-    l4_kems_validate,
+    l4_domains_list,
     l4_health,
-    l4_dashboard,
-    l4_signal_patterns,
+    l4_kems_validate,
+    l4_memory_read,
     l4_plugin_actions,
-    l4_plugin_workflows,
     l4_plugin_specs,
-    l4_cards_list,
+    l4_plugin_workflows,
+    l4_search,
     l4_signal_emit,
-    l4_claude_validate,
-    TOOLS,
+    l4_signal_patterns,
+    l4_signals_list,
+    l4_state_read,
+    l4_status_read,
 )
 
 
 class TestDomainTools:
     def test_domains_list_all(self):
         result = json.loads(l4_domains_list())
-        assert len(result) == 24
+        assert len(result) == 25
 
     def test_domains_list_by_type(self):
         result = json.loads(l4_domains_list("document"))

@@ -1,6 +1,6 @@
 """L4 Domain Registry — 24域统一注册表。
 
-SSOT: ~/Documents/驾驶舱/CARDS/DOMAIN-INDEX.md (如果不存在则使用硬编码默认值)
+SSOT: ~/Documents/@驾驶舱/_control/DOMAIN-INDEX.md (如果不存在则使用硬编码默认值)
 与 L0 MOF M1 domain/DOMAIN-*.yaml 互补: Registry 管理文件系统路径, MOF 管理语义模型。
 """
 
@@ -223,6 +223,13 @@ _BUILTIN_DOMAINS: list[Domain] = [
         id="ecos-workbench", name="eCOS Workbench", domain_type="workspace",
         path=Path.home() / "Workspace",
         bos_uri="bos://ecos/**",
+        governance_tier=1,
+    ),
+    # ── Runtime Data (WorkspaceDomain) ──
+    Domain(
+        id="runtime", name="Runtime Data", domain_type="workspace",
+        path=Path.home() / "runtime",
+        bos_uri="bos://runtime/**",
         governance_tier=1,
     ),
 ]

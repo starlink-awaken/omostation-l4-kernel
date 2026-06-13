@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from l4_kernel.registry import Domain, DomainRegistry
 from l4_kernel.lifecycle import DomainLifecycle
+from l4_kernel.registry import DomainRegistry
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ class TestDomainValidate:
 
     def test_validate_all(self, lifecycle):
         results = lifecycle.validate_all()
-        assert len(results) == 24
+        assert len(results) == 25
         assert "vault" in results
 
 

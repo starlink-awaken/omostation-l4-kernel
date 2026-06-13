@@ -156,7 +156,7 @@ class TestCardsPlane:
     def test_cards_sorted_by_priority(self, temp_cards_domain):
         cards = CardsPlane(temp_cards_domain)
         result = cards.scan_cards()
-        priorities = [c["priority"] for c in result]
+        [c["priority"] for c in result]
         # sort: (P0=0,P1=1,P2=2,P3=3), reverse=True → P0 first, then P1, then P2
         # But reverse=True on (score, created) means higher score first, then newer created
         # P0=0 < P1=1 → with reverse, P1=1 > P0=0 → P1 comes first? No...

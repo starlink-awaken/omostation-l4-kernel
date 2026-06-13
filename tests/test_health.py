@@ -1,17 +1,15 @@
 """Tests for L4 Kernel DomainHealth."""
 
-from pathlib import Path
 
-from l4_kernel.registry import DomainRegistry
 from l4_kernel.health import DomainHealth
-from l4_kernel.templates import init_domain_kems
+from l4_kernel.registry import DomainRegistry
 
 
 class TestDomainHealth:
     def test_aggregate_health(self):
         health = DomainHealth()
         result = health.aggregate_health()
-        assert result["total"] == 24
+        assert result["total"] == 25
         assert "document_domains" in result
         assert "by_type" in result
         assert result["health_rate"].endswith("%")

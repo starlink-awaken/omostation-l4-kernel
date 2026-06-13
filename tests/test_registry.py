@@ -48,7 +48,7 @@ class TestDomainRegistry:
             "shareddisk",
             "model-volume", "sharedmodel",
             "minerva", "knowledge-engine",
-            "l4-kernel", "ecos-workbench",
+            "l4-kernel", "ecos-workbench", "runtime",
         }
         assert len(all_d) == len(expected_ids), \
             f"Expected {len(expected_ids)} domains, got {len(all_d)}: {[d.id for d in all_d]}"
@@ -68,11 +68,6 @@ class TestDomainRegistry:
         docs = reg.list_by_type("document")
         assert len(docs) == 11  # 8 original + obsidian-vault + opc + family-shared
 
-    def test_list_by_type_document(self):
-        reg = DomainRegistry()
-        docs = reg.list_by_type("document")
-        assert len(docs) == 11  # 8 original + obsidian-vault + opc + family-shared
-
     def test_list_by_type_config(self):
         reg = DomainRegistry()
         configs = reg.list_by_type("config")
@@ -86,7 +81,7 @@ class TestDomainRegistry:
     def test_list_by_type_workspace(self):
         reg = DomainRegistry()
         workspaces = reg.list_by_type("workspace")
-        assert len(workspaces) == 2  # sharedwork + ecos-workbench
+        assert len(workspaces) == 3  # sharedwork + ecos-workbench + runtime
 
     def test_get_vault(self):
         reg = DomainRegistry()
