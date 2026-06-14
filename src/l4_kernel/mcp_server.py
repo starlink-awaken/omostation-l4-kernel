@@ -338,6 +338,72 @@ def l4_claude_validate(domain_id: str = "") -> str:
 
 
 # ═════════════════════════════════════════════════════════════════════
+# 演化系统 (3 tools)
+# ═════════════════════════════════════════════════════════════════════
+
+def l4_evolution_status() -> str:
+    """查看全系统演化与 Drift 状态。"""
+    try:
+        from pathlib import Path
+        root = Path("/Users/xiamingxing/Workspace")
+        loop_path = root / ".omo" / "_control" / "evolution" / "loop" / "history.json"
+
+        status = {"loop_history": None, "active_drifts": 0}
+        if loop_path.exists():
+            status["loop_history"] = json.loads(loop_path.read_text(encoding="utf-8"))
+
+        drift_dir = root / ".omo" / "_control" / "evolution" / "drift"
+        if drift_dir.exists():
+            status["active_drifts"] = len(list(drift_dir.glob("*.json")))
+
+        return json.dumps(status, ensure_ascii=False, default=str)
+    except Exception as e:
+        return _err(f"Failed to read evolution status: {e}")
+
+
+def l4_evolution_trigger(trigger_type: str = "manual") -> str:
+    """手动触发全系统 Drift 演化闭环扫描。"""
+    import os
+    import subprocess
+
+    try:
+        script = "/Users/xiamingxing/Workspace/scripts/opc_p6_self_evolve_cron.sh"
+        env = dict(os.environ, OPC_TRIGGER=trigger_type)
+        proc = subprocess.run(["bash", script], env=env, capture_output=True, text=True)
+        if proc.returncode == 0:
+            return _ok("Evolution trigger executed successfully. New tasks may have been planned.")
+        else:
+            return _err(f"Trigger failed: {proc.stderr}")
+    except Exception as e:
+        return _err(f"Trigger error: {e}")
+
+
+def l4_evolution_tasks() -> str:
+    """列出当前已自动发现但需人类审批的演进任务 (Planned)。"""
+    try:
+        from pathlib import Path
+
+        import yaml
+        root = Path("/Users/xiamingxing/Workspace")
+        planned_dir = root / ".omo" / "tasks" / "planned"
+
+        tasks = []
+        if planned_dir.exists():
+            for f in planned_dir.glob("OPC-P6-SELF-EVOLUTION-*.yaml"):
+                data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+                tasks.append({
+                    "id": data.get("id"),
+                    "title": data.get("title"),
+                    "source": data.get("source"),
+                    "approval_required": data.get("approval_required", True)
+                })
+        return json.dumps(tasks, ensure_ascii=False, default=str)
+    except Exception as e:
+        return _err(f"Failed to list evolution tasks: {e}")
+
+
+
+# ═════════════════════════════════════════════════════════════════════
 # 插件/工作流 (5 tools) + 文件操作 + 可执行资产
 # ═════════════════════════════════════════════════════════════════════
 
@@ -674,6 +740,10 @@ TOOLS = {
     "l4_engine_check": l4_engine_check,
     "l4_engine_logs": l4_engine_logs,
     "l4_workspace_search": l4_workspace_search,
+    # Self-Evolution (3)
+    "l4_evolution_status": l4_evolution_status,
+    "l4_evolution_trigger": l4_evolution_trigger,
+    "l4_evolution_tasks": l4_evolution_tasks,
 }
 
 
