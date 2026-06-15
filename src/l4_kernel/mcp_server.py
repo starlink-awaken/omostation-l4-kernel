@@ -12,7 +12,9 @@ Agent 通过此 MCP Server 操作 L4 数据，无需直接接触文件系统。
 from __future__ import annotations
 
 import json
+import os
 import sys
+from pathlib import Path
 from typing import Any
 
 from l4_kernel import DomainRegistry
@@ -341,11 +343,13 @@ def l4_claude_validate(domain_id: str = "") -> str:
 # 演化系统 (3 tools)
 # ═════════════════════════════════════════════════════════════════════
 
+WORKSPACE_ROOT = Path(os.environ.get("WORKSPACE_ROOT", str(Path.home() / "Workspace")))
+
+
 def l4_evolution_status() -> str:
     """查看全系统演化与 Drift 状态。"""
     try:
-        from pathlib import Path
-        root = Path("/Users/xiamingxing/Workspace")
+        root = WORKSPACE_ROOT
         loop_path = root / ".omo" / "_control" / "evolution" / "loop" / "history.json"
 
         status = {"loop_history": None, "active_drifts": 0}
@@ -367,7 +371,7 @@ def l4_evolution_trigger(trigger_type: str = "manual") -> str:
     import subprocess
 
     try:
-        script = "/Users/xiamingxing/Workspace/scripts/opc_p6_self_evolve_cron.sh"
+        script = str(WORKSPACE_ROOT / "scripts" / "opc_p6_self_evolve_cron.sh")
         env = dict(os.environ, OPC_TRIGGER=trigger_type)
         proc = subprocess.run(["bash", script], env=env, capture_output=True, text=True)
         if proc.returncode == 0:
@@ -381,10 +385,8 @@ def l4_evolution_trigger(trigger_type: str = "manual") -> str:
 def l4_evolution_tasks() -> str:
     """列出当前已自动发现但需人类审批的演进任务 (Planned)。"""
     try:
-        from pathlib import Path
-
         import yaml
-        root = Path("/Users/xiamingxing/Workspace")
+        root = WORKSPACE_ROOT
         planned_dir = root / ".omo" / "tasks" / "planned"
 
         tasks = []
