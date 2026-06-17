@@ -1,9 +1,7 @@
 """L4 Concurrency Manager — 多Agent并发操作管理。
 
-提供:
-1. 文件锁 (fcntl.flock) — 单机进程级并发保护
-2. 乐观锁 (版本号) — 读写冲突检测
-3. 锁上下文管理器 — with 语法
+适配自 ECOS L0 分布式锁抽象 (DistributedLock)。
+提供基于 fcntl.flock 的文件锁，兼容之前行为。
 """
 
 from __future__ import annotations
@@ -13,63 +11,79 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+# 从 L0 引入基础接口 (假设 ecos 已经可以通过 PYTHONPATH 或 workspace 配置访问)
+try:
+    from ecos.l0.concurrency import DistributedLock, LockAcquireError
+except ImportError:
+    # 垫片防腐层: 在还没发布 ecos package 前防止 l4-kernel 本地挂掉
+    class LockAcquireError(Exception):
+        pass
 
-class ConcurrencyManager:
-    """多Agent并发操作管理。
+    class DistributedLock:
+        def __init__(self, name: str):
+            self.name = name
 
-    使用方式:
-        mgr = ConcurrencyManager()
-        with mgr.lock(domain_path / "_control" / "STATE.md"):
-            # 安全读写 STATE.md
-            pass
-    """
 
-    LOCK_TIMEOUT = 5.0  # 获取锁超时 (秒)
+class L4FileLock(DistributedLock):
+    """基于 fcntl.flock 的本地文件锁，向下兼容。"""
 
-    @contextmanager
-    def lock(self, filepath: Path, timeout: float | None = None):
-        """获取文件排他锁。
+    def __init__(self, filepath: Path | str):
+        super().__init__(str(filepath))
+        self.filepath = Path(filepath)
+        self._fd = None
 
-        Args:
-            filepath: 要锁定的文件路径
-            timeout: 超时秒数 (默认 LOCK_TIMEOUT)
-
-        Yields:
-            锁定的文件对象 (已打开, append模式)
-
-        Raises:
-            TimeoutError: 超时未获取到锁
-        """
-        timeout = timeout or self.LOCK_TIMEOUT
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-
-        f = None
+    def acquire(self, timeout: float | None = None) -> bool:
+        timeout = timeout or 5.0
+        self.filepath.parent.mkdir(parents=True, exist_ok=True)
         start = time.time()
         while True:
             try:
-                f = open(filepath, "a")
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
+                self._fd = open(self.filepath, "a")
+                fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return True
             except OSError:
-                if f:
-                    f.close()
+                if self._fd:
+                    self._fd.close()
+                    self._fd = None
                 if time.time() - start > timeout:
-                    raise TimeoutError(f"Failed to acquire lock on {filepath} within {timeout}s")
+                    raise LockAcquireError(f"Failed to acquire lock on {self.filepath} within {timeout}s")
                 time.sleep(0.1)
 
+    def release(self) -> None:
+        if self._fd:
+            fcntl.flock(self._fd, fcntl.LOCK_UN)
+            self._fd.close()
+            self._fd = None
+
+    def check_and_set(self, expected_version: int, new_version: int) -> bool:
+        raise NotImplementedError("File lock does not support native atomic check-and-set")
+
+    @contextmanager
+    def lock(self, timeout: float | None = None):
+        self.acquire(timeout)
         try:
-            yield f
+            yield self._fd
         finally:
-            if f:
-                fcntl.flock(f, fcntl.LOCK_UN)
-                f.close()
+            self.release()
+
+
+class ConcurrencyManager:
+    """多Agent并发操作管理 (Facade 包装层)。"""
+
+    LOCK_TIMEOUT = 5.0
+
+    @contextmanager
+    def lock(self, filepath: Path, timeout: float | None = None):
+        """获取文件排他锁。"""
+        lock_obj = L4FileLock(filepath)
+        with lock_obj.lock(timeout or self.LOCK_TIMEOUT) as fd:
+            yield fd
 
     @contextmanager
     def lock_shared(self, filepath: Path, timeout: float | None = None):
         """获取文件共享锁 (多读)。"""
         timeout = timeout or self.LOCK_TIMEOUT
         filepath.parent.mkdir(parents=True, exist_ok=True)
-
         f = None
         start = time.time()
         while True:
@@ -83,7 +97,6 @@ class ConcurrencyManager:
                 if time.time() - start > timeout:
                     raise TimeoutError(f"Failed to acquire shared lock on {filepath}")
                 time.sleep(0.1)
-
         try:
             yield f
         finally:
@@ -91,14 +104,7 @@ class ConcurrencyManager:
                 fcntl.flock(f, fcntl.LOCK_UN)
                 f.close()
 
-    # ── 乐观锁 ────────────────────────────────────────────────────
-
     def read_with_version(self, filepath: Path) -> tuple[str, int]:
-        """读取文件内容和版本号 (mtime作为版本)。
-
-        Returns:
-            (content, version)
-        """
         if not filepath.exists():
             return ("", 0)
         stat = filepath.stat()
@@ -106,13 +112,6 @@ class ConcurrencyManager:
         return (content, int(stat.st_mtime * 1_000_000))
 
     def write_if_version(self, filepath: Path, content: str, expected_version: int) -> bool:
-        """乐观锁写入: 仅当版本号匹配时才写入。
-
-        expected_version=0 表示无条件写入 (跳过版本检查)。
-
-        Returns:
-            True if written, False if version conflict
-        """
         with self.lock(filepath):
             if expected_version != 0:
                 current = int(filepath.stat().st_mtime * 1_000_000) if filepath.exists() else 0
@@ -121,37 +120,27 @@ class ConcurrencyManager:
             filepath.write_text(content, encoding="utf-8")
             return True
 
-    # ── 批量锁 ────────────────────────────────────────────────────
-
     def __init__(self):
-        self._held_locks: set[str] = set()
+        self._held_locks: dict[str, L4FileLock] = {}
 
     @contextmanager
     def lock_domain_control(self, domain_path: Path, files: list[str] | None = None):
-        """锁定域控制面的多个文件 (按排序加锁避免死锁, 支持重入)。
-
-        Args:
-            domain_path: 域根路径
-            files: 要锁定的文件列表 (默认: STATE, MEMORY, signals, STATUS)
-        """
         if files is None:
             files = ["STATE.md", "MEMORY.md", "signals.md", "STATUS.md"]
-
         control = domain_path / "_control"
         filepaths = sorted(control / f for f in files)
-
-        locks = []
+        locks_acquired = []
         try:
             for fp in filepaths:
                 key = str(fp)
                 if key in self._held_locks:
-                    continue  # 重入: 跳过已持有的锁
-                self._held_locks.add(key)
-                lock_ctx = self.lock(fp)
-                lock_ctx.__enter__()
-                locks.append((key, lock_ctx))
+                    continue
+                lock_obj = L4FileLock(fp)
+                lock_obj.acquire(self.LOCK_TIMEOUT)
+                self._held_locks[key] = lock_obj
+                locks_acquired.append(key)
             yield
         finally:
-            for key, lock_ctx in reversed(locks):
-                self._held_locks.discard(key)
-                lock_ctx.__exit__(None, None, None)
+            for key in reversed(locks_acquired):
+                lock_obj = self._held_locks.pop(key)
+                lock_obj.release()
