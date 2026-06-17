@@ -12,6 +12,7 @@ license = { text = "MIT" }
 dependencies = [
     "pyyaml>=6.0",
     "model-driven",
+    "bus-foundation",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +45,7 @@ quote-style = "double"
 
 [tool.uv.sources]
 model-driven = { path = "../model-driven", editable = true }
+bus-foundation = { path = "../bus-foundation", editable = true }
 
 [dependency-groups]
 dev = [

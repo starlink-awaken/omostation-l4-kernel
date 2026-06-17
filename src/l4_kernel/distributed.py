@@ -44,7 +44,8 @@ class DistributedScenarioEngine:
         ok = sum(1 for r in results.values() if r.get("status") == "ok")
         total = len(results)
         self.signals.emit(
-            "cockpit", "✅" if ok == total else "⚠️",
+            "cockpit",
+            "✅" if ok == total else "⚠️",
             f"联邦域同步完成: {ok}/{total}",
             source="distributed.sync",
             cross_domain=True,
@@ -127,12 +128,14 @@ class DistributedScenarioEngine:
                 continue
             try:
                 stat = md_file.stat()
-                diff.append({
-                    "path": str(md_file.relative_to(domain_path)),
-                    "size": stat.st_size,
-                    "mtime": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
-                    "hash": "",  # placeholder for content hash
-                })
+                diff.append(
+                    {
+                        "path": str(md_file.relative_to(domain_path)),
+                        "size": stat.st_size,
+                        "mtime": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+                        "hash": "",  # placeholder for content hash
+                    }
+                )
             except OSError:
                 pass
 
@@ -142,8 +145,7 @@ class DistributedScenarioEngine:
     # 场景 14: 分布式任务分配
     # ═══════════════════════════════════════════════════════════════
 
-    def assign_and_dispatch(self, task_id: str, domain_id: str,
-                            task_type: str, priority: str = "P2") -> dict:
+    def assign_and_dispatch(self, task_id: str, domain_id: str, task_type: str, priority: str = "P2") -> dict:
         """分配并派发任务到最优节点。
 
         流程:
@@ -165,7 +167,8 @@ class DistributedScenarioEngine:
 
         # Step 3: 记录分配
         self.signals.emit(
-            "cockpit", "ℹ️",
+            "cockpit",
+            "ℹ️",
             f"任务分配: {task_id} → {target_node} ({task_type})",
             source="distributed.task",
         )
@@ -193,8 +196,7 @@ class DistributedScenarioEngine:
     # 场景 15: 多Agent协同
     # ═══════════════════════════════════════════════════════════════
 
-    def create_collaborative_task(self, title: str, subtasks: list[dict],
-                                  coordinator: str = "") -> dict:
+    def create_collaborative_task(self, title: str, subtasks: list[dict], coordinator: str = "") -> dict:
         """创建多Agent协同任务。
 
         Args:
@@ -220,17 +222,20 @@ class DistributedScenarioEngine:
                 strategy="affinity" if st.get("agent") else "load_balance",
             )
 
-            task_meta["subtasks"].append({
-                "id": f"{title}-subtask-{i + 1}",
-                "title": st["title"],
-                "domain": st.get("domain", "cockpit"),
-                "assigned_to": st.get("agent") or assignment["assigned_to"],
-                "status": "pending",
-                "depends_on": st.get("depends_on", []),
-            })
+            task_meta["subtasks"].append(
+                {
+                    "id": f"{title}-subtask-{i + 1}",
+                    "title": st["title"],
+                    "domain": st.get("domain", "cockpit"),
+                    "assigned_to": st.get("agent") or assignment["assigned_to"],
+                    "status": "pending",
+                    "depends_on": st.get("depends_on", []),
+                }
+            )
 
         self.signals.emit(
-            "cockpit", "ℹ️",
+            "cockpit",
+            "ℹ️",
             f"协同任务创建: {title} ({len(subtasks)} 子任务)",
             source="distributed.collaboration",
             cross_domain=True,
@@ -254,8 +259,7 @@ class DistributedScenarioEngine:
         for st in task_meta["subtasks"]:
             if st["status"] == "pending" and st.get("depends_on"):
                 deps_done = all(
-                    any(s["id"] == dep and s["status"] == "done"
-                        for s in task_meta["subtasks"])
+                    any(s["id"] == dep and s["status"] == "done" for s in task_meta["subtasks"])
                     for dep in st["depends_on"]
                 )
                 if not deps_done:

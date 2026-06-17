@@ -29,6 +29,7 @@ NodeRole = Literal["primary", "replica", "observer", "coordinator", "worker"]
 @dataclass
 class PeerNode:
     """对等节点。"""
+
     node_id: str
     hostname: str
     role: NodeRole
@@ -52,6 +53,7 @@ class PeerNode:
 @dataclass
 class FederatedDomain:
     """联邦域 — 跨节点的域视图。"""
+
     domain_id: str
     primary_node: str
     replica_nodes: list[str] = field(default_factory=list)
@@ -75,14 +77,14 @@ class FederatedDomain:
 # FederationHub
 # ═════════════════════════════════════════════════════════════════════
 
+
 class FederationHub:
     """L4 联邦中枢。
 
     管理多节点 L4 域，提供联邦视图和跨节点操作。
     """
 
-    def __init__(self, node_id: str, registry: DomainRegistry | None = None,
-                 config_path: Path | None = None):
+    def __init__(self, node_id: str, registry: DomainRegistry | None = None, config_path: Path | None = None):
         self.node_id = node_id
         self.registry = registry or DomainRegistry()
         self.config_path = config_path or Path.home() / ".config" / "l4-kernel" / "federation.json"
@@ -175,9 +177,13 @@ class FederationHub:
 
     # ── 联邦域管理 ────────────────────────────────────────────────
 
-    def register_federated_domain(self, domain_id: str, primary_node: str,
-                                  replica_nodes: list[str] | None = None,
-                                  sync_strategy: SyncStrategy = "push") -> FederatedDomain:
+    def register_federated_domain(
+        self,
+        domain_id: str,
+        primary_node: str,
+        replica_nodes: list[str] | None = None,
+        sync_strategy: SyncStrategy = "push",
+    ) -> FederatedDomain:
         """注册联邦域。"""
         fd = FederatedDomain(
             domain_id=domain_id,
@@ -268,7 +274,12 @@ class FederationHub:
 
     def _sync_merge(self, domain_id: str, fd: FederatedDomain) -> dict:
         """合并同步: 双向 CRDT。"""
-        return {"domain_id": domain_id, "strategy": "merge", "status": "ok", "note": "merge sync pending implementation"}
+        return {
+            "domain_id": domain_id,
+            "strategy": "merge",
+            "status": "ok",
+            "note": "merge sync pending implementation",
+        }
 
     def _compute_sync_diff(self, domain_path: Path, peer: PeerNode) -> list[dict]:
         """计算需要同步的文件差异 (基于 mtime)。"""
@@ -282,11 +293,13 @@ class FederationHub:
                 continue
             try:
                 stat = md_file.stat()
-                diff.append({
-                    "path": str(md_file.relative_to(domain_path)),
-                    "size": stat.st_size,
-                    "mtime": stat.st_mtime,
-                })
+                diff.append(
+                    {
+                        "path": str(md_file.relative_to(domain_path)),
+                        "size": stat.st_size,
+                        "mtime": stat.st_mtime,
+                    }
+                )
             except OSError:
                 pass
 
@@ -300,21 +313,14 @@ class FederationHub:
             "node_id": self.node_id,
             "peers": len(self.peers),
             "federated_domains": len(self.federated_domains),
-            "peers_healthy": sum(
-                1 for nid in self.peers
-                if self.check_peer_health(nid)["status"] == "healthy"
-            ),
-            "domains_synced": sum(
-                1 for fd in self.federated_domains.values()
-                if fd.last_sync
-            ),
+            "peers_healthy": sum(1 for nid in self.peers if self.check_peer_health(nid)["status"] == "healthy"),
+            "domains_synced": sum(1 for fd in self.federated_domains.values() if fd.last_sync),
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
     # ── 任务分配 ──────────────────────────────────────────────────
 
-    def assign_task(self, domain_id: str, task_type: str,
-                    strategy: TaskStrategy = "affinity") -> dict:
+    def assign_task(self, domain_id: str, task_type: str, strategy: TaskStrategy = "affinity") -> dict:
         """分配任务到最优节点。
 
         affinity: 分配到域主节点
@@ -329,9 +335,7 @@ class FederationHub:
         # 负载均衡: 选域最少的节点
         if strategy == "load_balance":
             candidates = [
-                (nid, len(peer.domains))
-                for nid, peer in self.peers.items()
-                if peer.role in ("primary", "worker")
+                (nid, len(peer.domains)) for nid, peer in self.peers.items() if peer.role in ("primary", "worker")
             ]
             if candidates:
                 best = min(candidates, key=lambda x: x[1])

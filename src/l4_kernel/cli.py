@@ -299,6 +299,7 @@ def main() -> int:
 
     if cmd == "mcp":
         from l4_kernel.mcp_server import main as mcp_main
+
         sys.argv = ["l4-kernel"] + args[1:]
         return mcp_main()
 

@@ -105,8 +105,7 @@ class ConcurrencyManager:
         content = filepath.read_text(encoding="utf-8")
         return (content, int(stat.st_mtime * 1_000_000))
 
-    def write_if_version(self, filepath: Path, content: str,
-                         expected_version: int) -> bool:
+    def write_if_version(self, filepath: Path, content: str, expected_version: int) -> bool:
         """乐观锁写入: 仅当版本号匹配时才写入。
 
         expected_version=0 表示无条件写入 (跳过版本检查)。
@@ -128,8 +127,7 @@ class ConcurrencyManager:
         self._held_locks: set[str] = set()
 
     @contextmanager
-    def lock_domain_control(self, domain_path: Path,
-                            files: list[str] | None = None):
+    def lock_domain_control(self, domain_path: Path, files: list[str] | None = None):
         """锁定域控制面的多个文件 (按排序加锁避免死锁, 支持重入)。
 
         Args:

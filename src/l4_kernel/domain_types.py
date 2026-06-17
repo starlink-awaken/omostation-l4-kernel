@@ -18,6 +18,7 @@ from l4_kernel.registry import Domain
 # DocumentDomain — KEMS 六面域
 # ═════════════════════════════════════════════════════════════════════
 
+
 class DocumentDomain(Domain):
     """DocumentDomain — 有 KEMS 六面结构的域。
 
@@ -37,8 +38,16 @@ class DocumentDomain(Domain):
         """检查控制面标准文件存在性。"""
         control = self.path / "_control"
         files = {}
-        for f in ["STATE.md", "MEMORY.md", "TIMELINE.md", "signals.md",
-                   "control-rules.md", "STATUS.md", "PLANE_INDEX.md", "CLAUDE.md"]:
+        for f in [
+            "STATE.md",
+            "MEMORY.md",
+            "TIMELINE.md",
+            "signals.md",
+            "control-rules.md",
+            "STATUS.md",
+            "PLANE_INDEX.md",
+            "CLAUDE.md",
+        ]:
             files[f] = (control / f).exists()
         files["决策日志/"] = (control / "决策日志").is_dir()
         return files
@@ -64,6 +73,7 @@ class DocumentDomain(Domain):
 # ConfigDomain — YAML/JSON 配置域
 # ═════════════════════════════════════════════════════════════════════
 
+
 class ConfigDomain(Domain):
     """ConfigDomain — 配置文件域。
 
@@ -79,12 +89,14 @@ class ConfigDomain(Domain):
             if f.is_file() and f.suffix in (".yaml", ".yml", ".json") and not f.name.startswith("."):
                 try:
                     stat = f.stat()
-                    configs.append({
-                        "name": str(f.relative_to(self.path)),
-                        "type": f.suffix.lstrip("."),
-                        "size": stat.st_size,
-                        "mtime": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
-                    })
+                    configs.append(
+                        {
+                            "name": str(f.relative_to(self.path)),
+                            "type": f.suffix.lstrip("."),
+                            "size": stat.st_size,
+                            "mtime": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+                        }
+                    )
                 except OSError:
                     pass
         return configs
@@ -118,6 +130,7 @@ class ConfigDomain(Domain):
 # ToolDomain — 脚本工具域
 # ═════════════════════════════════════════════════════════════════════
 
+
 class ToolDomain(Domain):
     """ToolDomain — 脚本工具域。
 
@@ -140,13 +153,15 @@ class ToolDomain(Domain):
                             shebang = ""
                     except (OSError, UnicodeDecodeError):
                         pass
-                    tools.append({
-                        "name": f.name,
-                        "path": str(f.relative_to(self.path)),
-                        "size": stat.st_size,
-                        "shebang": shebang[:50],
-                        "mtime": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
-                    })
+                    tools.append(
+                        {
+                            "name": f.name,
+                            "path": str(f.relative_to(self.path)),
+                            "size": stat.st_size,
+                            "shebang": shebang[:50],
+                            "mtime": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+                        }
+                    )
                 except OSError:
                     pass
         return tools
@@ -168,6 +183,7 @@ class ToolDomain(Domain):
 # WorkspaceDomain — 工作空间域
 # ═════════════════════════════════════════════════════════════════════
 
+
 class WorkspaceDomain(Domain):
     """WorkspaceDomain — 共享工作空间域。"""
 
@@ -182,11 +198,13 @@ class WorkspaceDomain(Domain):
                 if depth <= max_depth:
                     try:
                         stat = f.stat()
-                        files.append({
-                            "path": str(f.relative_to(self.path)),
-                            "size": stat.st_size,
-                            "mtime": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
-                        })
+                        files.append(
+                            {
+                                "path": str(f.relative_to(self.path)),
+                                "size": stat.st_size,
+                                "mtime": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+                            }
+                        )
                     except OSError:
                         pass
         return files
@@ -207,6 +225,7 @@ class WorkspaceDomain(Domain):
 # StorageDomain — 存储域
 # ═════════════════════════════════════════════════════════════════════
 
+
 class StorageDomain(Domain):
     """StorageDomain — 存储盘域。"""
 
@@ -217,7 +236,9 @@ class StorageDomain(Domain):
         try:
             result = subprocess.run(
                 ["df", "-h", str(self.path)],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             lines = result.stdout.strip().split("\n")
             if len(lines) >= 2:
@@ -248,6 +269,7 @@ class StorageDomain(Domain):
 # ModelDomain — 模型域
 # ═════════════════════════════════════════════════════════════════════
 
+
 class ModelDomain(Domain):
     """ModelDomain — 模型文件域。"""
 
@@ -260,12 +282,14 @@ class ModelDomain(Domain):
             if f.is_file() and not f.name.startswith("."):
                 try:
                     stat = f.stat()
-                    models.append({
-                        "name": f.name,
-                        "path": str(f.relative_to(self.path)),
-                        "size_mb": round(stat.st_size / (1024 * 1024), 1),
-                        "mtime": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
-                    })
+                    models.append(
+                        {
+                            "name": f.name,
+                            "path": str(f.relative_to(self.path)),
+                            "size_mb": round(stat.st_size / (1024 * 1024), 1),
+                            "mtime": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+                        }
+                    )
                 except OSError:
                     pass
         return models
@@ -288,6 +312,7 @@ class ModelDomain(Domain):
 # EngineDomain — 引擎域
 # ═════════════════════════════════════════════════════════════════════
 
+
 class EngineDomain(Domain):
     """EngineDomain — 运行引擎域。"""
 
@@ -297,7 +322,9 @@ class EngineDomain(Domain):
         try:
             result = subprocess.run(
                 ["pgrep", "-f", name],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             pids = [p for p in result.stdout.strip().split("\n") if p]
             return {"name": name, "running": len(pids) > 0, "pids": pids}

@@ -91,6 +91,7 @@ class DomainHealth:
             try:
                 status_text = (domain.path / "_control" / "STATUS.md").read_text(encoding="utf-8")
                 import re
+
                 m = re.search(r"当前状态[：:]\s*(\w+)", status_text)
                 if m:
                     health["status"] = m.group(1)
@@ -133,13 +134,15 @@ class DomainHealth:
                     reviewed_dt = datetime.fromisoformat(reviewed.replace("Z", "+00:00"))
                     days_since = (datetime.now(UTC) - reviewed_dt).days
                     if days_since > 30:
-                        issues.append({
-                            "file": "STATE.md",
-                            "field": "last-reviewed",
-                            "days_since_review": days_since,
-                            "level": "⚠️",
-                            "message": f"STATE.md last-reviewed is {days_since} days old (>30 days)",
-                        })
+                        issues.append(
+                            {
+                                "file": "STATE.md",
+                                "field": "last-reviewed",
+                                "days_since_review": days_since,
+                                "level": "⚠️",
+                                "message": f"STATE.md last-reviewed is {days_since} days old (>30 days)",
+                            }
+                        )
                 except (ValueError, TypeError):
                     pass
 
@@ -152,20 +155,24 @@ class DomainHealth:
                     last_dt = datetime.fromisoformat(last_signal.replace("Z", "+00:00"))
                     days_since = (datetime.now(UTC) - last_dt).days
                     if days_since > 7:
-                        issues.append({
-                            "file": "signals.md",
-                            "days_since_last_signal": days_since,
-                            "level": "⚠️",
-                            "message": f"No signals in {days_since} days (>7 days)",
-                        })
+                        issues.append(
+                            {
+                                "file": "signals.md",
+                                "days_since_last_signal": days_since,
+                                "level": "⚠️",
+                                "message": f"No signals in {days_since} days (>7 days)",
+                            }
+                        )
                 except (ValueError, TypeError):
                     pass
         else:
-            issues.append({
-                "file": "signals.md",
-                "level": "⚠️",
-                "message": "signals.md is empty or unreadable",
-            })
+            issues.append(
+                {
+                    "file": "signals.md",
+                    "level": "⚠️",
+                    "message": "signals.md is empty or unreadable",
+                }
+            )
 
         # 检查 STATUS ALERT 持续
         status_data = kems.read_status()
@@ -173,6 +180,7 @@ class DomainHealth:
             try:
                 status_text = (domain.path / "_control" / "STATUS.md").read_text(encoding="utf-8")
                 import re
+
                 m = re.search(r"当前状态[：:]\s*(\w+)", status_text)
                 if m and m.group(1) == "ALERT":
                     # 检查状态变更日志
@@ -185,11 +193,13 @@ class DomainHealth:
                                 last_dt = datetime.strptime(last_date, "%Y-%m-%d").replace(tzinfo=UTC)
                                 days_in_alert = (datetime.now(UTC) - last_dt).days
                                 if days_in_alert > 7:
-                                    issues.append({
-                                        "file": "STATUS.md",
-                                        "level": "🔴",
-                                        "message": f"STATUS has been ALERT for {days_in_alert} days (>7 days)",
-                                    })
+                                    issues.append(
+                                        {
+                                            "file": "STATUS.md",
+                                            "level": "🔴",
+                                            "message": f"STATUS has been ALERT for {days_in_alert} days (>7 days)",
+                                        }
+                                    )
                             except ValueError:
                                 pass
             except Exception:
@@ -310,21 +320,21 @@ class DomainHealth:
             icon = "✅" if s["missing"] == 0 else "⚠️"
             lines.append(f"| {t} | {s['existing']}/{s['total']} | {icon} |")
 
-        lines.extend([
-            "",
-            "## DocumentDomain 详情",
-            "",
-            "| 域 | 状态 | KEMS | 违规 | 新鲜度 | 最后信号 |",
-            "|----|------|------|------|--------|---------|",
-        ])
+        lines.extend(
+            [
+                "",
+                "## DocumentDomain 详情",
+                "",
+                "| 域 | 状态 | KEMS | 违规 | 新鲜度 | 最后信号 |",
+                "|----|------|------|------|--------|---------|",
+            ]
+        )
         for domain_id, h in health["document_domains"].items():
             kems_icon = "✅" if h["kems_valid"] else "❌"
             status = h.get("status", "?")
             freshness = f"{h['freshness_score']:.0%}"
             last_sig = h.get("last_signal_ts", "-")[:10] if h.get("last_signal_ts") else "-"
-            lines.append(
-                f"| {domain_id} | {status} | {kems_icon} | {h['violations']} | {freshness} | {last_sig} |"
-            )
+            lines.append(f"| {domain_id} | {status} | {kems_icon} | {h['violations']} | {freshness} | {last_sig} |")
 
         # 违规详情
         violations = self.get_violations()

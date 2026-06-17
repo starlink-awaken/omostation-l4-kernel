@@ -11,9 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 # ── 域类型枚举 ──────────────────────────────────────────────────────
-DomainType = Literal[
-    "document", "config", "engine", "tool", "workspace", "storage", "model"
-]
+DomainType = Literal["document", "config", "engine", "tool", "workspace", "storage", "model"]
 
 
 @dataclass
@@ -56,7 +54,9 @@ class Domain:
 _BUILTIN_DOMAINS: list[Domain] = [
     # ── DocumentDomain (8域) ──
     Domain(
-        id="cockpit", name="@驾驶舱", domain_type="document",
+        id="cockpit",
+        name="@驾驶舱",
+        domain_type="document",
         path=Path.home() / "Documents" / "@驾驶舱",
         bos_uri="bos://cockpit/**",
         kems_planes=["_control", "_knowledge", "_runtime", "_generated", "_meta", "_archive"],
@@ -64,7 +64,9 @@ _BUILTIN_DOMAINS: list[Domain] = [
         capabilities=["knowledge.read", "knowledge.search", "cards.manage"],
     ),
     Domain(
-        id="vault", name="@学习进化", domain_type="document",
+        id="vault",
+        name="@学习进化",
+        domain_type="document",
         path=Path.home() / "Documents" / "@学习进化",
         bos_uri="bos://vault/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
@@ -72,7 +74,9 @@ _BUILTIN_DOMAINS: list[Domain] = [
         capabilities=["knowledge.read", "knowledge.search", "knowledge.archive"],
     ),
     Domain(
-        id="creative", name="@创意创作", domain_type="document",
+        id="creative",
+        name="@创意创作",
+        domain_type="document",
         path=Path.home() / "Documents" / "@创意创作",
         bos_uri="bos://creative/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
@@ -80,7 +84,9 @@ _BUILTIN_DOMAINS: list[Domain] = [
         capabilities=["knowledge.read", "knowledge.search"],
     ),
     Domain(
-        id="personal", name="@个人", domain_type="document",
+        id="personal",
+        name="@个人",
+        domain_type="document",
         path=Path.home() / "Documents" / "@个人",
         bos_uri="bos://personal/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
@@ -88,28 +94,36 @@ _BUILTIN_DOMAINS: list[Domain] = [
         capabilities=["knowledge.read", "knowledge.search"],
     ),
     Domain(
-        id="shared", name="@公共", domain_type="document",
+        id="shared",
+        name="@公共",
+        domain_type="document",
         path=Path.home() / "Documents" / "@公共",
         bos_uri="bos://shared/**",
         kems_planes=["_control", "_entities", "_knowledge", "_runtime"],
         governance_tier=2,
     ),
     Domain(
-        id="family", name="@家庭生活", domain_type="document",
+        id="family",
+        name="@家庭生活",
+        domain_type="document",
         path=Path.home() / "Documents" / "@家庭生活",
         bos_uri="bos://family/**",
         kems_planes=["_control", "_knowledge", "_storage"],
         governance_tier=2,
     ),
     Domain(
-        id="work-weijian", name="@工作文档/卫健委", domain_type="document",
+        id="work-weijian",
+        name="@工作文档/卫健委",
+        domain_type="document",
         path=Path.home() / "Documents" / "@工作文档" / "卫健委",
         bos_uri="bos://work-weijian/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive", "_runtime"],
         governance_tier=2,
     ),
     Domain(
-        id="work-guozhuan", name="@工作文档/国转中心", domain_type="document",
+        id="work-guozhuan",
+        name="@工作文档/国转中心",
+        domain_type="document",
         path=Path.home() / "Documents" / "@工作文档" / "国转中心",
         bos_uri="bos://work-guozhuan/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive", "_runtime"],
@@ -117,68 +131,92 @@ _BUILTIN_DOMAINS: list[Domain] = [
     ),
     # ── ConfigDomain (3域) ──
     Domain(
-        id="ai-config", name="~/.ai", domain_type="config",
+        id="ai-config",
+        name="~/.ai",
+        domain_type="config",
         path=Path.home() / ".ai",
         bos_uri="bos://ai-config/**",
     ),
     Domain(
-        id="agents-config", name="~/.agents", domain_type="config",
+        id="agents-config",
+        name="~/.agents",
+        domain_type="config",
         path=Path.home() / ".agents",
         bos_uri="bos://agents-config/**",
     ),
     Domain(
-        id="icloud-sharedconf", name="SharedConf", domain_type="config",
+        id="icloud-sharedconf",
+        name="SharedConf",
+        domain_type="config",
         path=Path.home() / "SharedConf",
         bos_uri="bos://icloud-sharedconf/**",
     ),
     # ── ToolDomain (2域) ──
     Domain(
-        id="bin", name="~/bin", domain_type="tool",
+        id="bin",
+        name="~/bin",
+        domain_type="tool",
         path=Path.home() / "bin",
         bos_uri="bos://bin/**",
     ),
     Domain(
-        id="toolbox-tools", name="~/ToolBox", domain_type="tool",
+        id="toolbox-tools",
+        name="~/ToolBox",
+        domain_type="tool",
         path=Path.home() / "ToolBox",
         bos_uri="bos://toolbox-tools/**",
     ),
     # ── WorkspaceDomain (1域) ──
     Domain(
-        id="sharedwork", name="SharedWork", domain_type="workspace",
+        id="sharedwork",
+        name="SharedWork",
+        domain_type="workspace",
         path=Path("/Users") / "SharedWork",
         bos_uri="bos://sharedwork/**",
     ),
     # ── StorageDomain (1域) ──
     Domain(
-        id="shareddisk", name="SharedDisk", domain_type="storage",
+        id="shareddisk",
+        name="SharedDisk",
+        domain_type="storage",
         path=Path("/Volumes") / "SharedDisk",
         bos_uri="bos://shareddisk/**",
     ),
     # ── ModelDomain (2域) ──
     Domain(
-        id="model-volume", name="Model", domain_type="model",
+        id="model-volume",
+        name="Model",
+        domain_type="model",
         path=Path("/Volumes") / "Model",
         bos_uri="bos://model-volume/**",
     ),
     Domain(
-        id="sharedmodel", name="SharedModel", domain_type="model",
+        id="sharedmodel",
+        name="SharedModel",
+        domain_type="model",
         path=Path("/Volumes") / "SharedModel",
         bos_uri="bos://sharedmodel/**",
     ),
     # ── EngineDomain (2域) ──
     Domain(
-        id="minerva", name="Minerva 引擎", domain_type="engine",
+        id="minerva",
+        name="Minerva 引擎",
+        domain_type="engine",
         path=Path.home() / "minerva",
         bos_uri="bos://minerva/**",
     ),
     Domain(
-        id="knowledge-engine", name="Knowledge 引擎", domain_type="engine",
+        id="knowledge-engine",
+        name="Knowledge 引擎",
+        domain_type="engine",
         path=Path.home() / "knowledge",
         bos_uri="bos://knowledge-engine/**",
     ),
     # ── Obsidian Vault (DocumentDomain) ──
     Domain(
-        id="obsidian-vault", name="Obsidian Vault", domain_type="document",
+        id="obsidian-vault",
+        name="Obsidian Vault",
+        domain_type="document",
         path=Path.home() / "Library" / "Mobile Documents" / "iCloud~md~obsidian" / "Documents",
         bos_uri="bos://obsidian-vault/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
@@ -186,26 +224,31 @@ _BUILTIN_DOMAINS: list[Domain] = [
     ),
     # ── OPC (DocumentDomain, 新增 2026-06-10, 2026-06-13 P5-P7 self-correction 扩展) ──
     Domain(
-        id="opc", name="@OPC", domain_type="document",
+        id="opc",
+        name="@OPC",
+        domain_type="document",
         path=Path.home() / "Documents" / "@OPC",
         bos_uri="bos://opc/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage"],
         governance_tier=1,
         capabilities=[
-            "knowledge.read", "knowledge.search",
+            "knowledge.read",
+            "knowledge.search",
             # 2026-06-13 OPC P5-P7 self-correction 闭环后新增:
-            "cadence.cron_wrapper",          # 注入 INVOCATION_ID+OPC_TRIGGER
-            "cadence.fcntl_flock",           # 互斥写 *.index.json
-            "cadence.opc_mode_env",          # OPC_MODE 透传
-            "cadence.semantic_time_env",     # OPC_GENERATED_AT/OPC_TODAY 覆盖
-            "drift.self_evolve_planned_only",# self-evolution 任务仅落 planned/ + approval_required=true
-            "audit.5repos_section17",        # .omo/_delivery/audit-rollout/{date}-5repos.json
-            "audit.8_field_review_template", # .omo/standards/opc-review-template.md
+            "cadence.cron_wrapper",  # 注入 INVOCATION_ID+OPC_TRIGGER
+            "cadence.fcntl_flock",  # 互斥写 *.index.json
+            "cadence.opc_mode_env",  # OPC_MODE 透传
+            "cadence.semantic_time_env",  # OPC_GENERATED_AT/OPC_TODAY 覆盖
+            "drift.self_evolve_planned_only",  # self-evolution 任务仅落 planned/ + approval_required=true
+            "audit.5repos_section17",  # .omo/_delivery/audit-rollout/{date}-5repos.json
+            "audit.8_field_review_template",  # .omo/standards/opc-review-template.md
         ],
     ),
     # ── FamilyShared (DocumentDomain) ──
     Domain(
-        id="family-shared", name="FamilyShared", domain_type="document",
+        id="family-shared",
+        name="FamilyShared",
+        domain_type="document",
         path=Path.home() / "Documents" / "FamilyShared",
         bos_uri="bos://family-shared/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage"],
@@ -213,21 +256,27 @@ _BUILTIN_DOMAINS: list[Domain] = [
     ),
     # ── L4 Kernel (EngineDomain) ──
     Domain(
-        id="l4-kernel", name="L4 Kernel", domain_type="engine",
+        id="l4-kernel",
+        name="L4 Kernel",
+        domain_type="engine",
         path=Path.home() / "Workspace" / "projects" / "l4-kernel",
         bos_uri="bos://l4-kernel/**",
         governance_tier=1,
     ),
     # ── eCOS Workbench (WorkspaceDomain) ──
     Domain(
-        id="ecos-workbench", name="eCOS Workbench", domain_type="workspace",
+        id="ecos-workbench",
+        name="eCOS Workbench",
+        domain_type="workspace",
         path=Path.home() / "Workspace",
         bos_uri="bos://ecos/**",
         governance_tier=1,
     ),
     # ── Runtime Data (WorkspaceDomain) ──
     Domain(
-        id="runtime", name="Runtime Data", domain_type="workspace",
+        id="runtime",
+        name="Runtime Data",
+        domain_type="workspace",
         path=Path.home() / "runtime",
         bos_uri="bos://runtime/**",
         governance_tier=1,

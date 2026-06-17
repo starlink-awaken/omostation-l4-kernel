@@ -29,11 +29,13 @@ from l4_kernel.skill_loader import (
 # 场景定义
 # ═════════════════════════════════════════════════════════════════════
 
+
 class WorkflowStep:
     """工作流步骤。"""
 
-    def __init__(self, action: str, description: str, domain: str = "",
-                 condition: Callable | None = None, on_error: str = "stop"):
+    def __init__(
+        self, action: str, description: str, domain: str = "", condition: Callable | None = None, on_error: str = "stop"
+    ):
         self.action = action
         self.description = description
         self.domain = domain
@@ -53,6 +55,7 @@ class Workflow:
 # ═════════════════════════════════════════════════════════════════════
 # 场景编排引擎
 # ═════════════════════════════════════════════════════════════════════
+
 
 class ScenarioEngine:
     """跨域场景编排引擎。
@@ -109,7 +112,8 @@ class ScenarioEngine:
 
         # 发射完成信号
         self.signals.emit(
-            "cockpit", "✅" if status == "ok" else "⚠️",
+            "cockpit",
+            "✅" if status == "ok" else "⚠️",
             f"场景完成: {workflow.name} ({completed}/{len(workflow.steps)})",
             source="scenario_engine",
         )
@@ -127,6 +131,7 @@ class ScenarioEngine:
     def _execute_step(self, step: WorkflowStep, **kwargs) -> dict:
         """执行单个步骤。"""
         import logging
+
         logger = logging.getLogger(__name__)
 
         # 条件检查
@@ -149,15 +154,27 @@ class ScenarioEngine:
 
         # 文件级动作 (skill YAML 的底层操作)
         path_override = kwargs.get("path_override", "")
-        target_path = Path(path_override) if path_override else Path(step.action.split(":")[-1].strip() if ":" in step.action else step.description)
+        target_path = (
+            Path(path_override)
+            if path_override
+            else Path(step.action.split(":")[-1].strip() if ":" in step.action else step.description)
+        )
 
         file_actions = {
             "read_file": lambda: self._action_read_file(domain_obj.path, target_path),
             "write_file": lambda: self._action_write_file(domain_obj.path, target_path, kwargs.get("content", "")),
-            "append_signal": lambda: self._action_append_signal(domain, kwargs.get("message", "") or step.description,
-                                                                kwargs.get("source", "l4-kernel"), kwargs.get("type", "ℹ️")),
-            "create_entry": lambda: self._action_create_entry(domain_obj.path, str(target_path.parent) if target_path.parent else "_knowledge/创作系统/输入-灵感抽屉",
-                                                               kwargs.get("title", "untitled"), kwargs.get("content", "")),
+            "append_signal": lambda: self._action_append_signal(
+                domain,
+                kwargs.get("message", "") or step.description,
+                kwargs.get("source", "l4-kernel"),
+                kwargs.get("type", "ℹ️"),
+            ),
+            "create_entry": lambda: self._action_create_entry(
+                domain_obj.path,
+                str(target_path.parent) if target_path.parent else "_knowledge/创作系统/输入-灵感抽屉",
+                kwargs.get("title", "untitled"),
+                kwargs.get("content", ""),
+            ),
             "update_table": lambda: self._action_update_state(domain_obj.path, kwargs.get("content", "更新")),
             "update_section": lambda: self._action_update_state(domain_obj.path, kwargs.get("content", "更新")),
             "write_yaml": lambda: {"status": "ok", "action": "write_yaml"},
@@ -191,48 +208,50 @@ class ScenarioEngine:
                 logger.debug(f"Step action '{action}' → plugin '{dtype}' (cross-type)")
                 return alt(domain_obj.path)
 
-        raise ValueError(f"Unknown action: '{action}'. Available builtins: {list(builtin.keys())}. Available plugins: check l4_plugin_actions")
-
+        raise ValueError(
+            f"Unknown action: '{action}'. Available builtins: {list(builtin.keys())}. Available plugins: check l4_plugin_actions"
+        )
 
     def _action_read_file(self, domain_path, target):
         fp = domain_path / target
         if not fp.exists():
-            return {'status': 'error', 'message': f'File not found: {target}'}
+            return {"status": "error", "message": f"File not found: {target}"}
         try:
-            c = fp.read_text(encoding='utf-8')
-            return {'status': 'ok', 'path': str(target), 'size': len(c), 'content': c[:500]}
+            c = fp.read_text(encoding="utf-8")
+            return {"status": "ok", "path": str(target), "size": len(c), "content": c[:500]}
         except OSError as e:
-            return {'status': 'error', 'message': str(e)}
+            return {"status": "error", "message": str(e)}
 
-    def _action_write_file(self, domain_path, target, content=''):
+    def _action_write_file(self, domain_path, target, content=""):
         fp = domain_path / target
         try:
             fp.parent.mkdir(parents=True, exist_ok=True)
-            fp.write_text(content, encoding='utf-8')
-            return {'status': 'ok', 'path': str(target), 'size': len(content)}
+            fp.write_text(content, encoding="utf-8")
+            return {"status": "ok", "path": str(target), "size": len(content)}
         except OSError as e:
-            return {'status': 'error', 'message': str(e)}
+            return {"status": "error", "message": str(e)}
 
-    def _action_append_signal(self, domain_id, message, source='l4-kernel', signal_type='ℹ️'):
+    def _action_append_signal(self, domain_id, message, source="l4-kernel", signal_type="ℹ️"):
         ok = self.signals.emit(domain_id, signal_type, message, source=source)
-        return {'status': 'ok' if ok else 'error', 'message': message, 'type': signal_type}
+        return {"status": "ok" if ok else "error", "message": message, "type": signal_type}
 
-    def _action_create_entry(self, domain_path, parent_dir, title, content=''):
+    def _action_create_entry(self, domain_path, parent_dir, title, content=""):
         from datetime import date
+
         today = date.today().isoformat()
         dir_path = domain_path / parent_dir
-        fp = dir_path / f'{today}-{title}.md'
+        fp = dir_path / f"{today}-{title}.md"
         try:
             dir_path.mkdir(parents=True, exist_ok=True)
-            fp.write_text(f'# {title}\n\n{content}', encoding='utf-8')
-            return {'status': 'ok', 'path': str(fp), 'filename': fp.name}
+            fp.write_text(f"# {title}\n\n{content}", encoding="utf-8")
+            return {"status": "ok", "path": str(fp), "filename": fp.name}
         except OSError as e:
-            return {'status': 'error', 'message': str(e)}
+            return {"status": "error", "message": str(e)}
 
-    def _action_update_state(self, domain_path, content=''):
-        return {'status': 'ok', 'message': 'STATE update', 'content': content[:200]}
+    def _action_update_state(self, domain_path, content=""):
+        return {"status": "ok", "message": "STATE update", "content": content[:200]}
 
-# ── YAML skill/workflow 直接执行 ─────────────────────────────────
+    # ── YAML skill/workflow 直接执行 ─────────────────────────────────
 
     def run_skill(self, domain_id: str, skill_id: str, **params) -> dict:
         """加载并执行一个 YAML skill。
@@ -287,9 +306,12 @@ class ScenarioEngine:
         duration = (datetime.now(UTC) - start).total_seconds()
 
         status = "ok" if failed == 0 else "partial" if len(step_results) > failed else "error"
-        self.signals.emit(domain_id, "✅" if status == "ok" else "⚠️",
-                          f"skill 执行: {skill_id} ({len(step_results)}/{len(skill.get('steps', []))})",
-                          source="scenario_engine")
+        self.signals.emit(
+            domain_id,
+            "✅" if status == "ok" else "⚠️",
+            f"skill 执行: {skill_id} ({len(step_results)}/{len(skill.get('steps', []))})",
+            source="scenario_engine",
+        )
 
         return {
             "status": status,
@@ -332,10 +354,10 @@ class ScenarioEngine:
             "skill_results": all_results,
         }
 
-
-# ═════════════════════════════════════════════════════════════════════
-# 预定义场景
+        # ═════════════════════════════════════════════════════════════════════
+        # 预定义场景
         from l4_kernel.templates import KemsValidator
+
         d = self.registry.get(domain_id)
         if not d:
             raise ValueError(f"Domain '{domain_id}' not found")
@@ -372,7 +394,6 @@ SCENARIOS: dict[str, Workflow] = {
             WorkflowStep("cross_domain_notify", "通知相关域"),
         ],
     ),
-
     # ── 场景 2: 信号→诊断→修复 ──
     "signal_to_fix": Workflow(
         name="signal_to_fix",
@@ -385,7 +406,6 @@ SCENARIOS: dict[str, Workflow] = {
             WorkflowStep("cross_domain_notify", "通知相关域"),
         ],
     ),
-
     # ── 场景 3: 周度全局治理 ──
     "weekly_governance": Workflow(
         name="weekly_governance",
@@ -401,7 +421,6 @@ SCENARIOS: dict[str, Workflow] = {
             WorkflowStep("cross_domain_notify", "周报通知"),
         ],
     ),
-
     # ── 场景 4: 域创建→初始化→注册 ──
     "domain_create": Workflow(
         name="domain_create",
@@ -411,7 +430,6 @@ SCENARIOS: dict[str, Workflow] = {
             WorkflowStep("cross_domain_notify", "通知新域创建"),
         ],
     ),
-
     # ── 场景 11: Agent 会话 ──
     "agent_session": Workflow(
         name="agent_session",
@@ -426,6 +444,7 @@ SCENARIOS: dict[str, Workflow] = {
 
 
 # ── 便捷函数 ────────────────────────────────────────────────────
+
 
 def run_scenario(name: str, registry: DomainRegistry | None = None, **kwargs) -> dict:
     """执行预定义场景。"""

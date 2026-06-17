@@ -277,6 +277,7 @@ class ClaudeInjector:
 
 # ── 便捷函数 ────────────────────────────────────────────────────
 
+
 def inject_all_domains(registry: DomainRegistry | None = None) -> dict:
     """便捷函数: 一键注入所有域。"""
     injector = ClaudeInjector(registry)

@@ -133,6 +133,7 @@ tags: [控制面, 控制器]
 # Schema 校验规则
 # ═════════════════════════════════════════════════════════════════════
 
+
 class KemsValidator:
     """KEMS 控制面 Schema 校验器。
 
@@ -141,8 +142,11 @@ class KemsValidator:
 
     # 控制面 5 核心文件（必须存在）
     REQUIRED_CONTROL_FILES = [
-        "MEMORY.md", "STATE.md", "signals.md",
-        "control-rules.md", "STATUS.md",
+        "MEMORY.md",
+        "STATE.md",
+        "signals.md",
+        "control-rules.md",
+        "STATUS.md",
     ]
 
     # 信号类型枚举
@@ -178,11 +182,13 @@ class KemsValidator:
         issues = []
         for f in self.REQUIRED_CONTROL_FILES:
             if not (self._control / f).exists():
-                issues.append({
-                    "rule": "V-CONTROL-01",
-                    "severity": "error",
-                    "message": f"missing required file: _control/{f}",
-                })
+                issues.append(
+                    {
+                        "rule": "V-CONTROL-01",
+                        "severity": "error",
+                        "message": f"missing required file: _control/{f}",
+                    }
+                )
         return issues
 
     def check_memory_frontmatter(self) -> list[dict]:
@@ -194,19 +200,23 @@ class KemsValidator:
         try:
             fm = self._parse_frontmatter(fp)
             if fm is None:
-                issues.append({
-                    "rule": "V-CONTROL-02",
-                    "severity": "warning",
-                    "message": "MEMORY.md: no YAML frontmatter found",
-                })
+                issues.append(
+                    {
+                        "rule": "V-CONTROL-02",
+                        "severity": "warning",
+                        "message": "MEMORY.md: no YAML frontmatter found",
+                    }
+                )
             else:
                 for field in self.REQUIRED_FRONTMATTER:
                     if field not in fm:
-                        issues.append({
-                            "rule": "V-CONTROL-02",
-                            "severity": "warning",
-                            "message": f"MEMORY.md: missing required frontmatter field '{field}'",
-                        })
+                        issues.append(
+                            {
+                                "rule": "V-CONTROL-02",
+                                "severity": "warning",
+                                "message": f"MEMORY.md: missing required frontmatter field '{field}'",
+                            }
+                        )
         except Exception:
             pass
         return issues
@@ -224,11 +234,13 @@ class KemsValidator:
             if m:
                 status = m.group(1)
                 if status not in self.STATUS_VALUES:
-                    issues.append({
-                        "rule": "V-CONTROL-03",
-                        "severity": "error",
-                        "message": f"STATUS.md: unknown status '{status}', must be one of {self.STATUS_VALUES}",
-                    })
+                    issues.append(
+                        {
+                            "rule": "V-CONTROL-03",
+                            "severity": "error",
+                            "message": f"STATUS.md: unknown status '{status}', must be one of {self.STATUS_VALUES}",
+                        }
+                    )
         except Exception:
             pass
         return issues
@@ -250,11 +262,13 @@ class KemsValidator:
                         # 检查是否包含已知信号 emoji
                         has_known = any(ch in self.SIGNAL_TYPES for ch in sig_type)
                         if sig_type and not has_known:
-                            issues.append({
-                                "rule": "V-CONTROL-04",
-                                "severity": "warning",
-                                "message": f"signals.md: unknown signal type in row: {line[:60]}",
-                            })
+                            issues.append(
+                                {
+                                    "rule": "V-CONTROL-04",
+                                    "severity": "warning",
+                                    "message": f"signals.md: unknown signal type in row: {line[:60]}",
+                                }
+                            )
         except Exception:
             pass
         return issues
@@ -270,11 +284,13 @@ class KemsValidator:
             ids = set(re.findall(r"\b(CR\d{2,})\b", text))
             for crid in ids:
                 if not re.match(r"^CR\d{2}$", crid):
-                    issues.append({
-                        "rule": "V-CONTROL-05",
-                        "severity": "info",
-                        "message": f"control-rules.md: non-standard CR ID format: {crid}",
-                    })
+                    issues.append(
+                        {
+                            "rule": "V-CONTROL-05",
+                            "severity": "info",
+                            "message": f"control-rules.md: non-standard CR ID format: {crid}",
+                        }
+                    )
         except Exception:
             pass
         return issues
@@ -289,11 +305,13 @@ class KemsValidator:
             try:
                 fm = self._parse_frontmatter(fp)
                 if fm and not fm.get("owner"):
-                    issues.append({
-                        "rule": "V-CONTROL-07",
-                        "severity": "error",
-                        "message": f"{fname}: owner field is empty",
-                    })
+                    issues.append(
+                        {
+                            "rule": "V-CONTROL-07",
+                            "severity": "error",
+                            "message": f"{fname}: owner field is empty",
+                        }
+                    )
             except Exception:
                 pass
         return issues
@@ -317,6 +335,7 @@ class KemsValidator:
 # ═════════════════════════════════════════════════════════════════════
 # 域骨架生成
 # ═════════════════════════════════════════════════════════════════════
+
 
 def init_domain_kems(
     domain_path: Path,

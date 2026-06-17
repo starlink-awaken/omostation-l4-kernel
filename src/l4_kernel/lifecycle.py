@@ -25,6 +25,7 @@ try:
     from model_driven.lifecycle.pipeline import PipelinePhase, PipelineTracker
     from model_driven.mof.m3_extended import LifecycleStage
     from model_driven.toolchain.derivation_engine import DerivationEngine
+
     _MD_AVAILABLE = True
 except ImportError:
     LifecycleManager = None  # type: ignore
@@ -126,7 +127,8 @@ class DomainLifecycle:
 
         # 发射信号
         self.signals.emit(
-            domain_id, "ℹ️",
+            domain_id,
+            "ℹ️",
             f"域创建完成: {name} ({domain_type})",
             source="lifecycle.create",
         )
@@ -156,7 +158,8 @@ class DomainLifecycle:
         has_kems = control.is_dir()
 
         self.signals.emit(
-            domain_id, "ℹ️",
+            domain_id,
+            "ℹ️",
             f"域已接管: {domain.name} (has_kems={has_kems})",
             source="lifecycle.adopt",
         )
@@ -248,11 +251,13 @@ class DomainLifecycle:
 
         if domain.domain_type == "document":
             kems = KemsPlane(domain.path)
-            kems.write_status({
-                "status": "archived",
-                "archived_reason": reason,
-                "archived_at": datetime.now(UTC).isoformat(),
-            })
+            kems.write_status(
+                {
+                    "status": "archived",
+                    "archived_reason": reason,
+                    "archived_at": datetime.now(UTC).isoformat(),
+                }
+            )
 
         self.signals.emit(domain_id, "ℹ️", f"域已归档: {reason}" if reason else "域已归档", source="lifecycle.archive")
         return {"status": "ok", "message": f"Domain '{domain_id}' archived"}
@@ -300,9 +305,17 @@ class DomainLifecycle:
                 SIGNALS_TEMPLATE,
                 STATUS_TEMPLATE,
             )
+
             today = datetime.now(UTC).strftime("%Y-%m-%d")
-            params = {"domain_name": domain.name, "owner": "migrated", "created": today,
-                       "domain_type_desc": "", "domain_purpose": "", "ssot_scope": "", "key_files": ""}
+            params = {
+                "domain_name": domain.name,
+                "owner": "migrated",
+                "created": today,
+                "domain_type_desc": "",
+                "domain_purpose": "",
+                "ssot_scope": "",
+                "key_files": "",
+            }
             file_templates = {
                 "STATE.md": f"# STATE — {domain.name} 状态\n\n## 当前阶段定位\n\n## 活跃事项\n",
                 "MEMORY.md": MEMORY_TEMPLATE.format(**params),
@@ -316,7 +329,8 @@ class DomainLifecycle:
                     changes.append(f"created control file: {f}")
 
         self.signals.emit(
-            domain_id, "ℹ️",
+            domain_id,
+            "ℹ️",
             f"KEMS 迁移 {to_version}: {len(changes)} changes",
             source="lifecycle.migrate",
         )
@@ -343,6 +357,7 @@ class DomainLifecycle:
             return result
 
         from l4_kernel.health import DomainHealth
+
         health = DomainHealth(self.registry)
         report = health.aggregate_health()
 

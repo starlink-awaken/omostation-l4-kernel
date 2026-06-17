@@ -3,7 +3,8 @@
 > **Layer**: L4 自我层  
 > **Role**: L4 管理面 — 19-21 域统一注册 / KEMS 六面治理 / 跨域信号  
 > **Stack**: Python 3.13+, uv, fastmcp, pyyaml  
-> **Health**: ~250 tests
+> **Health**: See local CI and runtime probes
+> **SSOT**: 运行时健康、测试规模、域/工具计数以本项目 CI、运行时探针和 workspace governance SSOT 为准
 >
 > 系统全景参见：[`docs/ARCHITECTURE-DIAGRAM.md`](../docs/ARCHITECTURE-DIAGRAM.md)
 

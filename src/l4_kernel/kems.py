@@ -25,8 +25,14 @@ class KemsPlane:
 
     # 控制面标准文件列表
     CONTROL_FILES = [
-        "STATE.md", "MEMORY.md", "TIMELINE.md", "signals.md",
-        "control-rules.md", "STATUS.md", "PLANE_INDEX.md", "CLAUDE.md",
+        "STATE.md",
+        "MEMORY.md",
+        "TIMELINE.md",
+        "signals.md",
+        "control-rules.md",
+        "STATUS.md",
+        "PLANE_INDEX.md",
+        "CLAUDE.md",
     ]
 
     def __init__(self, domain_path: Path) -> None:
@@ -176,11 +182,13 @@ class KemsPlane:
                     idx = text.lower().index(kw)
                     snippet_start = max(0, idx - 40)
                     snippet_end = min(len(text), idx + 120)
-                    results.append({
-                        "path": str(md_file.relative_to(self._root)),
-                        "title": title,
-                        "snippet": "..." + text[snippet_start:snippet_end].replace("\n", " ").strip() + "...",
-                    })
+                    results.append(
+                        {
+                            "path": str(md_file.relative_to(self._root)),
+                            "title": title,
+                            "snippet": "..." + text[snippet_start:snippet_end].replace("\n", " ").strip() + "...",
+                        }
+                    )
                     if len(results) >= max_results:
                         break
             except (OSError, ValueError):
@@ -236,17 +244,19 @@ class CardsPlane(KemsPlane):
                     _, fm, __ = text.split("---", 2)
                     meta = yaml.safe_load(fm) or {}
                     if isinstance(meta, dict) and meta.get("id") and meta.get("type"):
-                        cards.append({
-                            "id": str(meta.get("id", "")),
-                            "type": str(meta.get("type", "")),
-                            "status": str(meta.get("status", "")),
-                            "title": str(meta.get("title", "")),
-                            "priority": str(meta.get("priority", "")),
-                            "domain": str(meta.get("domain", "")),
-                            "created": str(meta.get("created", "")),
-                            "parent": str(meta.get("parent", "")),
-                            "tags": str(meta.get("tags", "[]")),
-                        })
+                        cards.append(
+                            {
+                                "id": str(meta.get("id", "")),
+                                "type": str(meta.get("type", "")),
+                                "status": str(meta.get("status", "")),
+                                "title": str(meta.get("title", "")),
+                                "priority": str(meta.get("priority", "")),
+                                "domain": str(meta.get("domain", "")),
+                                "created": str(meta.get("created", "")),
+                                "parent": str(meta.get("parent", "")),
+                                "tags": str(meta.get("tags", "[]")),
+                            }
+                        )
             except (OSError, ValueError, yaml.YAMLError):
                 continue
 

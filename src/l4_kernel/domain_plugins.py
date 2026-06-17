@@ -12,14 +12,18 @@ from pathlib import Path
 # ConfigDomainPlugin — 配置域操作
 # ═════════════════════════════════════════════════════════════════════
 
+
 class ConfigDomainPlugin:
     """ConfigDomain 业务操作插件。"""
 
     domain_type = "config"
     name = "config-schema"
 
-    def on_load(self) -> None: pass
-    def on_unload(self) -> None: pass
+    def on_load(self) -> None:
+        pass
+
+    def on_unload(self) -> None:
+        pass
 
     def get_actions(self) -> dict:
         return {
@@ -60,9 +64,13 @@ class ConfigDomainPlugin:
 
     def _action_config_audit(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import ConfigDomain
+
         d = ConfigDomain(
-            id="temp", name="temp", domain_type="config",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="config",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         configs = d.list_configs()
         issues = []
@@ -90,6 +98,7 @@ class ConfigDomainPlugin:
                 if "_archive" in f.parts:
                     continue
                 import shutil
+
                 dest = archive / f.name
                 shutil.copy2(f, dest)
                 count += 1
@@ -97,9 +106,13 @@ class ConfigDomainPlugin:
 
     def _action_config_validate_all(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import ConfigDomain
+
         d = ConfigDomain(
-            id="temp", name="temp", domain_type="config",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="config",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         configs = d.list_configs()
         results = {}
@@ -115,14 +128,18 @@ class ConfigDomainPlugin:
 # ToolDomainPlugin — 工具域操作
 # ═════════════════════════════════════════════════════════════════════
 
+
 class ToolDomainPlugin:
     """ToolDomain 业务操作插件。"""
 
     domain_type = "tool"
     name = "tool-registry"
 
-    def on_load(self) -> None: pass
-    def on_unload(self) -> None: pass
+    def on_load(self) -> None:
+        pass
+
+    def on_unload(self) -> None:
+        pass
 
     def get_actions(self) -> dict:
         return {
@@ -162,9 +179,13 @@ class ToolDomainPlugin:
 
     def _action_tool_inventory(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import ToolDomain
+
         d = ToolDomain(
-            id="temp", name="temp", domain_type="tool",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="tool",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         tools = d.list_tools()
         return {
@@ -175,9 +196,13 @@ class ToolDomainPlugin:
 
     def _action_tool_health_check(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import ToolDomain
+
         d = ToolDomain(
-            id="temp", name="temp", domain_type="tool",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="tool",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         tools = d.list_tools()
         healthy = 0
@@ -199,9 +224,13 @@ class ToolDomainPlugin:
         from datetime import UTC, datetime
 
         from l4_kernel.domain_types import ToolDomain
+
         d = ToolDomain(
-            id="temp", name="temp", domain_type="tool",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="tool",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         tools = d.list_tools()
         deprecated = []
@@ -230,14 +259,18 @@ class ToolDomainPlugin:
 # EngineDomainPlugin — 引擎域操作
 # ═════════════════════════════════════════════════════════════════════
 
+
 class EngineDomainPlugin:
     """EngineDomain 业务操作插件。"""
 
     domain_type = "engine"
     name = "engine-monitor"
 
-    def on_load(self) -> None: pass
-    def on_unload(self) -> None: pass
+    def on_load(self) -> None:
+        pass
+
+    def on_unload(self) -> None:
+        pass
 
     def get_actions(self) -> dict:
         return {
@@ -276,9 +309,13 @@ class EngineDomainPlugin:
 
     def _action_engine_health_check(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import EngineDomain
+
         d = EngineDomain(
-            id="temp", name="temp", domain_type="engine",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="engine",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         process = d.check_process()
         config = d.get_config()
@@ -298,15 +335,20 @@ class EngineDomainPlugin:
         if not config_file.exists():
             return {"action": "engine_config_rotate", "status": "no_config"}
         import shutil
+
         backup = domain_path / "config.yaml.bak"
         shutil.copy2(config_file, backup)
         return {"action": "engine_config_rotate", "status": "ok", "backup": str(backup)}
 
     def _action_engine_log_analyze(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import EngineDomain
+
         d = EngineDomain(
-            id="temp", name="temp", domain_type="engine",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="engine",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         logs = d.get_logs(lines=50)
         errors = [_ for _ in logs if "error" in _.lower() or "exception" in _.lower() or "traceback" in _.lower()]
@@ -322,14 +364,18 @@ class EngineDomainPlugin:
 # StorageDomainPlugin — 存储域操作
 # ═════════════════════════════════════════════════════════════════════
 
+
 class StorageDomainPlugin:
     """StorageDomain 业务操作插件。"""
 
     domain_type = "storage"
     name = "storage-monitor"
 
-    def on_load(self) -> None: pass
-    def on_unload(self) -> None: pass
+    def on_load(self) -> None:
+        pass
+
+    def on_unload(self) -> None:
+        pass
 
     def get_actions(self) -> dict:
         return {
@@ -367,9 +413,13 @@ class StorageDomainPlugin:
 
     def _action_disk_monitor(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import StorageDomain
+
         d = StorageDomain(
-            id="temp", name="temp", domain_type="storage",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="storage",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         usage = d.get_disk_usage()
         status = "ok"
@@ -386,9 +436,13 @@ class StorageDomainPlugin:
 
     def _action_mount_check(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import StorageDomain
+
         d = StorageDomain(
-            id="temp", name="temp", domain_type="storage",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="storage",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         return {"action": "mount_check", "mount": d.check_mount_status()}
 
@@ -397,14 +451,18 @@ class StorageDomainPlugin:
 # ModelDomainPlugin — 模型域操作
 # ═════════════════════════════════════════════════════════════════════
 
+
 class ModelDomainPlugin:
     """ModelDomain 业务操作插件。"""
 
     domain_type = "model"
     name = "model-inventory"
 
-    def on_load(self) -> None: pass
-    def on_unload(self) -> None: pass
+    def on_load(self) -> None:
+        pass
+
+    def on_unload(self) -> None:
+        pass
 
     def get_actions(self) -> dict:
         return {
@@ -441,9 +499,13 @@ class ModelDomainPlugin:
 
     def _action_model_inventory(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import ModelDomain
+
         d = ModelDomain(
-            id="temp", name="temp", domain_type="model",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="model",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         models = d.list_models()
         total_size = sum(m.get("size_mb", 0) for m in models)
@@ -456,9 +518,13 @@ class ModelDomainPlugin:
 
     def _action_checksum_verify(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import ModelDomain
+
         d = ModelDomain(
-            id="temp", name="temp", domain_type="model",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="model",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         models = d.list_models()
         results = {}
@@ -475,14 +541,18 @@ class ModelDomainPlugin:
 # WorkspaceDomainPlugin — 工作空间域操作
 # ═════════════════════════════════════════════════════════════════════
 
+
 class WorkspaceDomainPlugin:
     """WorkspaceDomain 业务操作插件。"""
 
     domain_type = "workspace"
     name = "workspace-index"
 
-    def on_load(self) -> None: pass
-    def on_unload(self) -> None: pass
+    def on_load(self) -> None:
+        pass
+
+    def on_unload(self) -> None:
+        pass
 
     def get_actions(self) -> dict:
         return {
@@ -519,9 +589,13 @@ class WorkspaceDomainPlugin:
 
     def _action_workspace_index(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import WorkspaceDomain
+
         d = WorkspaceDomain(
-            id="temp", name="temp", domain_type="workspace",
-            path=domain_path, bos_uri="bos://temp/**",
+            id="temp",
+            name="temp",
+            domain_type="workspace",
+            path=domain_path,
+            bos_uri="bos://temp/**",
         )
         files = d.index_files(max_depth=2)
         return {

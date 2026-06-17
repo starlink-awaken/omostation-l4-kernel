@@ -16,10 +16,17 @@ from l4_kernel.registry import DomainRegistry
 # model-driven 桥接 (可选依赖)
 try:
     from model_driven.management.omo_bridge import OMOBridge
+
     _MD_BRIDGE = OMOBridge()
 except ImportError:
     OMOBridge = None  # type: ignore
     _MD_BRIDGE = None
+
+# Omni-Bus Facade 桥接
+try:
+    from bus_foundation.facade import event as bus_event
+except ImportError:
+    bus_event = None
 
 SignalType = Literal["✅", "⚠️", "🔴", "ℹ️"]
 
@@ -77,6 +84,7 @@ class SignalBus:
             cockpit = self.registry.get("cockpit")
             if cockpit and cockpit.exists():
                 import fcntl
+
                 cockpit_kems = KemsPlane(cockpit.path)
                 cross_event = {
                     "ts": datetime.now(UTC).isoformat(),
@@ -95,6 +103,17 @@ class SignalBus:
                         fcntl.flock(f, fcntl.LOCK_UN)
                 except (OSError, ValueError):
                     cockpit_kems.append_signal(cross_event)  # 回退: 无锁写入
+
+        # Omni-Bus Facade 投递 (X1 强制路由)
+        if bus_event:
+            bus_payload = {
+                "domain_id": domain_id,
+                "message": message,
+                "affected": affected_domains or [],
+            }
+            # The topic can be e.g. "l4.signal.red"
+            topic = f"l4.signal.{signal_type}"
+            bus_event.publish(topic=topic, payload=bus_payload, source_uri="bos://governance/l4-kernel")
 
         return True
 
@@ -119,7 +138,9 @@ class SignalBus:
             message = sig["message"]
             affected = sig.get("affected", [])
             results[domain_id] = self.emit(
-                domain_id, signal_type, message,
+                domain_id,
+                signal_type,
+                message,
                 source=sig.get("source", "l4-kernel"),
                 cross_domain=cross_domain,
                 affected_domains=affected,
@@ -186,13 +207,15 @@ class SignalBus:
         for did, sigs in by_domain.items():
             reds = [s for s in sigs if s.get("type") == "🔴"]
             if len(reds) >= 3:
-                patterns.append({
-                    "pattern": "consecutive_red",
-                    "domain": did,
-                    "count": len(reds),
-                    "level": "🔴",
-                    "message": f"Domain {did} has {len(reds)} 🔴 signals in {window_hours}h — consider upgrading to CRITICAL",
-                })
+                patterns.append(
+                    {
+                        "pattern": "consecutive_red",
+                        "domain": did,
+                        "count": len(reds),
+                        "level": "🔴",
+                        "message": f"Domain {did} has {len(reds)} 🔴 signals in {window_hours}h — consider upgrading to CRITICAL",
+                    }
+                )
 
         # 检测 2: 多域同时 ⚠️
         warning_domains = set()
@@ -200,13 +223,15 @@ class SignalBus:
             if sig.get("type") == "⚠️":
                 warning_domains.add(sig.get("domain_id", ""))
         if len(warning_domains) >= 3:
-            patterns.append({
-                "pattern": "multi_domain_warning",
-                "domains": sorted(warning_domains),
-                "count": len(warning_domains),
-                "level": "⚠️",
-                "message": f"{len(warning_domains)} domains have ⚠️ signals — possible systemic issue",
-            })
+            patterns.append(
+                {
+                    "pattern": "multi_domain_warning",
+                    "domains": sorted(warning_domains),
+                    "count": len(warning_domains),
+                    "level": "⚠️",
+                    "message": f"{len(warning_domains)} domains have ⚠️ signals — possible systemic issue",
+                }
+            )
 
         # 检测 3: 跨域信号无闭环
         cross_sigs = [s for s in recent if s.get("source_domain")]
@@ -216,13 +241,15 @@ class SignalBus:
                 for a in s.get("affected", []):
                     affected_ids.add(a)
             if affected_ids:
-                patterns.append({
-                    "pattern": "cross_domain_pending",
-                    "source_domains": sorted(set(s.get("source_domain", "") for s in cross_sigs)),
-                    "affected_domains": sorted(affected_ids),
-                    "level": "ℹ️",
-                    "message": f"Cross-domain signals pending closure: {sorted(affected_ids)}",
-                })
+                patterns.append(
+                    {
+                        "pattern": "cross_domain_pending",
+                        "source_domains": sorted(set(s.get("source_domain", "") for s in cross_sigs)),
+                        "affected_domains": sorted(affected_ids),
+                        "level": "ℹ️",
+                        "message": f"Cross-domain signals pending closure: {sorted(affected_ids)}",
+                    }
+                )
 
         return patterns
 
@@ -235,8 +262,7 @@ class SignalBus:
 
         if errors:
             msgs = [e["message"] for e in errors]
-            self.emit(domain_id, "🔴", f"Schema violations: {'; '.join(msgs[:3])}",
-                      source="KemsValidator")
+            self.emit(domain_id, "🔴", f"Schema violations: {'; '.join(msgs[:3])}", source="KemsValidator")
             # OMO 桥接: 严重违规自动注册债务
             if _MD_BRIDGE:
                 for e in errors:
@@ -247,8 +273,6 @@ class SignalBus:
                     )
         elif warnings:
             msgs = [w["message"] for w in warnings[:3]]
-            self.emit(domain_id, "⚠️", f"Schema warnings: {'; '.join(msgs)}",
-                      source="KemsValidator")
+            self.emit(domain_id, "⚠️", f"Schema warnings: {'; '.join(msgs)}", source="KemsValidator")
         else:
-            self.emit(domain_id, "✅", "Schema validation passed",
-                      source="KemsValidator")
+            self.emit(domain_id, "✅", "Schema validation passed", source="KemsValidator")

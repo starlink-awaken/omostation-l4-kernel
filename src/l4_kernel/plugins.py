@@ -34,6 +34,7 @@ from typing import Protocol
 # 插件接口
 # ═════════════════════════════════════════════════════════════════════
 
+
 class L4Plugin(Protocol):
     """L4 Kernel 插件接口。
 
@@ -55,6 +56,7 @@ class L4Plugin(Protocol):
 # ═════════════════════════════════════════════════════════════════════
 # 内置插件: DocumentDomain KEMS 操作
 # ═════════════════════════════════════════════════════════════════════
+
 
 class DocumentKemsPlugin:
     """DocumentDomain KEMS 业务操作插件。
@@ -85,21 +87,17 @@ class DocumentKemsPlugin:
             "signal_respond": self._action_signal_respond,
             "timeline_log": self._action_timeline_log,
             "status_evaluate": self._action_status_evaluate,
-
             # 知识面操作
             "knowledge_index": self._action_knowledge_index,
             "knowledge_search": self._action_knowledge_search,
             "knowledge_categorize": self._action_knowledge_categorize,
-
             # 实体面操作
             "entity_register": self._action_entity_register,
             "entity_review": self._action_entity_review,
             "entity_update": self._action_entity_update,
-
             # 存储面操作
             "storage_archive": self._action_storage_archive,
             "storage_cleanup": self._action_storage_cleanup,
-
             # 跨域操作
             "cross_domain_sync": self._action_cross_domain_sync,
             "cross_domain_notify": self._action_cross_domain_notify,
@@ -108,6 +106,7 @@ class DocumentKemsPlugin:
     def _action_state_review(self, domain_path: Path) -> dict:
         """审查 STATE.md 并生成建议。"""
         from l4_kernel.kems import KemsPlane
+
         kems = KemsPlane(domain_path)
         state = kems.read_state()
         signals = kems.read_signals()
@@ -117,15 +116,13 @@ class DocumentKemsPlugin:
             "action": "state_review",
             "current_state": state,
             "recent_warnings": len(recent_warnings),
-            "recommendations": (
-                ["处理最近的警告信号"] if recent_warnings
-                else ["STATE.md 状态正常"]
-            ),
+            "recommendations": (["处理最近的警告信号"] if recent_warnings else ["STATE.md 状态正常"]),
         }
 
     def _action_memory_update(self, domain_path: Path) -> dict:
         """更新 MEMORY.md 元事实。"""
         from l4_kernel.kems import KemsPlane
+
         kems = KemsPlane(domain_path)
         memory = kems.read_memory()
         return {
@@ -137,6 +134,7 @@ class DocumentKemsPlugin:
     def _action_signal_respond(self, domain_path: Path) -> dict:
         """响应最近的 ⚠️🔴 信号。"""
         from l4_kernel.kems import KemsPlane
+
         kems = KemsPlane(domain_path)
         signals = kems.read_signals()
         pending = [s for s in signals if s.get("type") in ("⚠️", "🔴")]
@@ -149,6 +147,7 @@ class DocumentKemsPlugin:
     def _action_timeline_log(self, domain_path: Path) -> dict:
         """记录时间线事件。"""
         from l4_kernel.kems import KemsPlane
+
         kems = KemsPlane(domain_path)
         events = kems.read_timeline()
         return {
@@ -160,6 +159,7 @@ class DocumentKemsPlugin:
     def _action_status_evaluate(self, domain_path: Path) -> dict:
         """评估并建议 STATUS 更新。"""
         from l4_kernel.kems import KemsPlane
+
         kems = KemsPlane(domain_path)
         status = kems.read_status()
         signals = kems.read_signals()
@@ -310,6 +310,7 @@ class DocumentKemsPlugin:
 
     def _mechanism_signal_auto_respond(self, domain_path: Path) -> dict:
         from l4_kernel.kems import KemsPlane
+
         kems = KemsPlane(domain_path)
         signals = kems.read_signals()
         criticals = [s for s in signals[-10:] if s.get("type") == "🔴"]
@@ -322,10 +323,11 @@ class DocumentKemsPlugin:
     def _mechanism_freshness_auto_alert(self, domain_path: Path) -> dict:
         return {"mechanism": "freshness_auto_alert", "status": "ok"}
 
-    def _mechanism_status_auto_evaluate(self, domain_path: Path,
-                                          warn_threshold: int = 3,
-                                          crit_threshold: int = 3) -> dict:
+    def _mechanism_status_auto_evaluate(
+        self, domain_path: Path, warn_threshold: int = 3, crit_threshold: int = 3
+    ) -> dict:
         from l4_kernel.kems import KemsPlane
+
         kems = KemsPlane(domain_path)
         signals = kems.read_signals()
         warnings = sum(1 for s in signals[-20:] if s.get("type") == "⚠️")
@@ -351,6 +353,7 @@ class DocumentKemsPlugin:
 # 插件注册表
 # ═════════════════════════════════════════════════════════════════════
 
+
 class PluginRegistry:
     """L4 Kernel 插件注册表。
 
@@ -373,6 +376,7 @@ class PluginRegistry:
             ToolDomainPlugin,
             WorkspaceDomainPlugin,
         )
+
         self.register(ConfigDomainPlugin())
         self.register(ToolDomainPlugin())
         self.register(EngineDomainPlugin())

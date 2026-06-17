@@ -67,6 +67,26 @@ wheels = [
 ]
 
 [[package]]
+name = "bus-foundation"
+version = "0.1.1"
+source = { editable = "../bus-foundation" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
+]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest-asyncio", specifier = ">=1.4.0" }]
+
+[[package]]
 name = "cachetools"
 version = "7.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -538,6 +558,7 @@ name = "l4-kernel"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "bus-foundation" },
     { name = "model-driven" },
     { name = "pyyaml" },
 ]
@@ -555,6 +576,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bus-foundation", editable = "../bus-foundation" },
     { name = "model-driven", editable = "../model-driven" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0" },
     { name = "pyyaml", specifier = ">=6.0" },

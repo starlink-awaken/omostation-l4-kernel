@@ -68,11 +68,13 @@ def load_domain_index() -> list[dict[str, str]] | None:
         if in_table and line.startswith("|") and "---" not in line:
             cells = [c.strip() for c in line.split("|")]
             if len(cells) >= 5 and cells[1] and cells[2]:
-                domains.append({
-                    "id": cells[1],
-                    "name": cells[2].replace("@", ""),
-                    "path": cells[4],
-                })
+                domains.append(
+                    {
+                        "id": cells[1],
+                        "name": cells[2].replace("@", ""),
+                        "path": cells[4],
+                    }
+                )
     return domains
 
 
@@ -104,24 +106,28 @@ def check_consistency() -> dict[str, Any]:
             # 算一下 vault 是否有其他形式
             alt_keys = [k for k in vault_keys if d.id in k]
             if not alt_keys:
-                diffs.append({
-                    "type": "registry_only",
-                    "domain": d.id,
-                    "source": "registry.py",
-                    "detail": f"已在 registry.py 注册 ({d.name}), 但 vault-paths.yaml 无 {expected_key} 路径",
-                    "fix": f"vault-paths.yaml 添加 {expected_key}: {d.path}",
-                })
+                diffs.append(
+                    {
+                        "type": "registry_only",
+                        "domain": d.id,
+                        "source": "registry.py",
+                        "detail": f"已在 registry.py 注册 ({d.name}), 但 vault-paths.yaml 无 {expected_key} 路径",
+                        "fix": f"vault-paths.yaml 添加 {expected_key}: {d.path}",
+                    }
+                )
 
     # 2. registry 有 → DOMAIN-INDEX 无
     for d in registry_domains:
         if index_ids and d.id not in index_ids:
-            diffs.append({
-                "type": "registry_only",
-                "domain": d.id,
-                "source": "DOMAIN-INDEX.md",
-                "detail": f"已在 registry.py 注册 ({d.name}), 但 DOMAIN-INDEX.md 无此域",
-                "fix": "DOMAIN-INDEX.md 添加一行",
-            })
+            diffs.append(
+                {
+                    "type": "registry_only",
+                    "domain": d.id,
+                    "source": "DOMAIN-INDEX.md",
+                    "detail": f"已在 registry.py 注册 ({d.name}), 但 DOMAIN-INDEX.md 无此域",
+                    "fix": "DOMAIN-INDEX.md 添加一行",
+                }
+            )
 
     # 3. vault 有 → registry 无 (仅检查 *_root 路径)
     if vault_paths:
@@ -129,13 +135,15 @@ def check_consistency() -> dict[str, Any]:
             if key.endswith("_root"):
                 domain_id = key.replace("_root", "")
                 if domain_id not in registry_ids:
-                    diffs.append({
-                        "type": "vault_only",
-                        "domain": domain_id,
-                        "source": "vault-paths.yaml",
-                        "detail": f"vault-paths.yaml 有 {key}, 但 registry.py 未注册 {domain_id}",
-                        "fix": f"registry.py _BUILTIN_DOMAINS 添加 Domain(id='{domain_id}', ...)",
-                    })
+                    diffs.append(
+                        {
+                            "type": "vault_only",
+                            "domain": domain_id,
+                            "source": "vault-paths.yaml",
+                            "detail": f"vault-paths.yaml 有 {key}, 但 registry.py 未注册 {domain_id}",
+                            "fix": f"registry.py _BUILTIN_DOMAINS 添加 Domain(id='{domain_id}', ...)",
+                        }
+                    )
 
     # 4. vault 路径与 registry 路径不一致
     if vault_paths:
@@ -150,13 +158,15 @@ def check_consistency() -> dict[str, Any]:
                     v_parts = expanded_vault.rstrip("/").split("/")[-2:]
                     r_parts = registry_path.rstrip("/").split("/")[-2:]
                     if v_parts != r_parts:
-                        diffs.append({
-                            "type": "path_mismatch",
-                            "domain": d.id,
-                            "source": "vault-paths.yaml ↔ registry.py",
-                            "detail": f"路径不一致: vault={vault_path} / registry={registry_path}",
-                            "fix": f"统一为 {registry_path}",
-                        })
+                        diffs.append(
+                            {
+                                "type": "path_mismatch",
+                                "domain": d.id,
+                                "source": "vault-paths.yaml ↔ registry.py",
+                                "detail": f"路径不一致: vault={vault_path} / registry={registry_path}",
+                                "fix": f"统一为 {registry_path}",
+                            }
+                        )
 
     return {
         "total_registry": len(registry_domains),

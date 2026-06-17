@@ -55,7 +55,9 @@ def _reload_globals() -> dict:
 
 
 def _ok(data: Any = None) -> str:
-    return json.dumps({"status": "ok", "data": data} if data is not None else {"status": "ok"}, ensure_ascii=False, default=str)
+    return json.dumps(
+        {"status": "ok", "data": data} if data is not None else {"status": "ok"}, ensure_ascii=False, default=str
+    )
 
 
 def _err(msg: str) -> str:
@@ -65,6 +67,7 @@ def _err(msg: str) -> str:
 # ═════════════════════════════════════════════════════════════════════
 # 域管理 (7 tools)
 # ═════════════════════════════════════════════════════════════════════
+
 
 def l4_domains_list(domain_type: str = "") -> str:
     """列出所有域或按类型筛选。"""
@@ -84,13 +87,23 @@ def l4_domain_info(domain_id: str) -> str:
 
 
 def l4_domain_create(
-    domain_id: str, name: str, domain_type: str, path: str,
-    owner: str = "未指定", description: str = "", dry_run: bool = False,
+    domain_id: str,
+    name: str,
+    domain_type: str,
+    path: str,
+    owner: str = "未指定",
+    description: str = "",
+    dry_run: bool = False,
 ) -> str:
     """创建新域。"""
     result = _lifecycle.create(
-        domain_id, name, domain_type, path,
-        owner=owner, description=description, dry_run=dry_run,
+        domain_id,
+        name,
+        domain_type,
+        path,
+        owner=owner,
+        description=description,
+        dry_run=dry_run,
     )
     return json.dumps(result, ensure_ascii=False, default=str)
 
@@ -126,6 +139,7 @@ def l4_domain_migrate(domain_id: str = "", to_version: str = "v5") -> str:
 # ═════════════════════════════════════════════════════════════════════
 # KEMS 控制面操作 (8 tools)
 # ═════════════════════════════════════════════════════════════════════
+
 
 def _get_kems(domain_id: str):
     d = _registry.get(domain_id)
@@ -202,6 +216,7 @@ def l4_signal_emit(domain_id: str, signal_type: str, message: str, cross_domain:
 # 搜索/校验 (5 tools)
 # ═════════════════════════════════════════════════════════════════════
 
+
 def l4_search(domain_id: str, keyword: str, max_results: int = 10) -> str:
     """全文搜索。"""
     kems = _get_kems(domain_id)
@@ -250,6 +265,7 @@ def l4_files_list(domain_id: str, plane: str = "_control", pattern: str = "") ->
 # ═════════════════════════════════════════════════════════════════════
 # CARDS 操作 (5 tools)
 # ═════════════════════════════════════════════════════════════════════
+
 
 def _get_cards():
     cockpit = _registry.get("cockpit")
@@ -312,6 +328,7 @@ def l4_cards_compliance(card_id: str) -> str:
 # ═════════════════════════════════════════════════════════════════════
 # 健康/仪表板 (4 tools)
 # ═════════════════════════════════════════════════════════════════════
+
 
 def l4_health(domain_id: str = "") -> str:
     """全域/单域健康报告。"""
@@ -386,6 +403,7 @@ def l4_evolution_tasks() -> str:
     """列出当前已自动发现但需人类审批的演进任务 (Planned)。"""
     try:
         import yaml
+
         root = WORKSPACE_ROOT
         planned_dir = root / ".omo" / "tasks" / "planned"
 
@@ -393,21 +411,23 @@ def l4_evolution_tasks() -> str:
         if planned_dir.exists():
             for f in planned_dir.glob("OPC-P6-SELF-EVOLUTION-*.yaml"):
                 data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
-                tasks.append({
-                    "id": data.get("id"),
-                    "title": data.get("title"),
-                    "source": data.get("source"),
-                    "approval_required": data.get("approval_required", True)
-                })
+                tasks.append(
+                    {
+                        "id": data.get("id"),
+                        "title": data.get("title"),
+                        "source": data.get("source"),
+                        "approval_required": data.get("approval_required", True),
+                    }
+                )
         return json.dumps(tasks, ensure_ascii=False, default=str)
     except Exception as e:
         return _err(f"Failed to list evolution tasks: {e}")
 
 
-
 # ═════════════════════════════════════════════════════════════════════
 # 插件/工作流 (5 tools) + 文件操作 + 可执行资产
 # ═════════════════════════════════════════════════════════════════════
+
 
 def l4_plugin_actions(domain_type: str) -> str:
     """列出域类型的可用插件动作。"""
@@ -503,6 +523,7 @@ def l4_entry_create(domain_id: str, parent_dir: str, name: str, content: str) ->
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
     from datetime import date
+
     today = date.today().isoformat()
     dir_path = d.path / parent_dir
     fp = dir_path / f"{today}-{name}.md"
@@ -587,12 +608,12 @@ def l4_check_consistency() -> str:
     """三源一致性校验。"""
     return json.dumps(check_consistency(), ensure_ascii=False, default=str)
 
-
-# ═════════════════════════════════════════════════════════════════════
-# Config/Tool/Storage/Model/Engine 域操作 (8 tools)
-# ═════════════════════════════════════════════════════════════════════
+    # ═════════════════════════════════════════════════════════════════════
+    # Config/Tool/Storage/Model/Engine 域操作 (8 tools)
+    # ═════════════════════════════════════════════════════════════════════
     """列出配置域文件。"""
     from l4_kernel.domain_types import wrap_domain
+
     d = _registry.get(domain_id)  # noqa: F821
     if not d:
         return _err(f"Domain '{domain_id}' not found")  # noqa: F821
@@ -605,6 +626,7 @@ def l4_check_consistency() -> str:
 def l4_config_read(domain_id: str, path: str) -> str:
     """读取配置文件。"""
     from l4_kernel.domain_types import wrap_domain
+
     d = _registry.get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
@@ -618,6 +640,7 @@ def l4_config_read(domain_id: str, path: str) -> str:
 def l4_tools_list(domain_id: str) -> str:
     """列出工具域脚本。"""
     from l4_kernel.domain_types import wrap_domain
+
     d = _registry.get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
@@ -630,6 +653,7 @@ def l4_tools_list(domain_id: str) -> str:
 def l4_storage_usage(domain_id: str) -> str:
     """磁盘使用情况。"""
     from l4_kernel.domain_types import wrap_domain
+
     d = _registry.get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
@@ -642,6 +666,7 @@ def l4_storage_usage(domain_id: str) -> str:
 def l4_models_list(domain_id: str) -> str:
     """列出模型文件。"""
     from l4_kernel.domain_types import wrap_domain
+
     d = _registry.get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
@@ -654,6 +679,7 @@ def l4_models_list(domain_id: str) -> str:
 def l4_engine_check(domain_id: str, process_name: str = "") -> str:
     """检查引擎进程。"""
     from l4_kernel.domain_types import wrap_domain
+
     d = _registry.get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
@@ -666,6 +692,7 @@ def l4_engine_check(domain_id: str, process_name: str = "") -> str:
 def l4_engine_logs(domain_id: str, log_file: str = "daemon.log", lines: int = 20) -> str:
     """读取引擎日志。"""
     from l4_kernel.domain_types import wrap_domain
+
     d = _registry.get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
@@ -678,6 +705,7 @@ def l4_engine_logs(domain_id: str, log_file: str = "daemon.log", lines: int = 20
 def l4_workspace_search(domain_id: str, pattern: str) -> str:
     """工作空间文件搜索。"""
     from l4_kernel.domain_types import wrap_domain
+
     d = _registry.get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
@@ -751,6 +779,7 @@ TOOLS = {
 
 # ── MCP Server 入口 ──────────────────────────────────────────────
 
+
 def _register_tools(mcp):
     """注册所有 42 个 MCP 工具。"""
     for name, fn in TOOLS.items():
@@ -763,6 +792,7 @@ def run_stdio():
     """启动 MCP stdio 服务器。"""
     try:
         from fastmcp import FastMCP
+
         mcp = FastMCP("l4-kernel")
         _register_tools(mcp)
         mcp.run(transport="stdio")
@@ -777,6 +807,7 @@ def run_http(port: int = 7455):
         import asyncio
 
         from fastmcp import FastMCP
+
         mcp = FastMCP("l4-kernel")
         _register_tools(mcp)
         asyncio.run(mcp.run_http_async(host="0.0.0.0", port=port))  # noqa: S104
@@ -791,6 +822,7 @@ def run_sse(port: int = 7456):
         import asyncio
 
         from fastmcp import FastMCP
+
         mcp = FastMCP("l4-kernel")
         _register_tools(mcp)
         asyncio.run(mcp.run_http_async(transport="sse", host="0.0.0.0", port=port))  # noqa: S104  # noqa: S104
