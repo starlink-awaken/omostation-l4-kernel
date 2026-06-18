@@ -16,11 +16,16 @@ class TestSignalBus:
 
             # 创建临时注册表
             reg = DomainRegistry()
-            reg.register(Domain(
-                id="test-domain", name="测试域", domain_type="document",
-                path=root, bos_uri="bos://test/**",
-                kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
-            ))
+            reg.register(
+                Domain(
+                    id="test-domain",
+                    name="测试域",
+                    domain_type="document",
+                    path=root,
+                    bos_uri="bos://test/**",
+                    kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
+                )
+            )
 
             bus = SignalBus(reg)
             result = bus.emit("test-domain", "✅", "测试信号", source="test")
@@ -28,6 +33,7 @@ class TestSignalBus:
 
             # 验证信号已写入
             from l4_kernel.kems import KemsPlane
+
             kems = KemsPlane(root)
             signals = kems.read_signals()
             assert len(signals) >= 1  # 至少有新信号
@@ -45,11 +51,16 @@ class TestSignalBus:
             root = Path(td)
             init_domain_kems(root, domain_name="测试", owner="test")
             reg = DomainRegistry()
-            reg.register(Domain(
-                id="batch-test", name="测试", domain_type="document",
-                path=root, bos_uri="bos://test/**",
-                kems_planes=["_control"],
-            ))
+            reg.register(
+                Domain(
+                    id="batch-test",
+                    name="测试",
+                    domain_type="document",
+                    path=root,
+                    bos_uri="bos://test/**",
+                    kems_planes=["_control"],
+                )
+            )
             bus = SignalBus(reg)
             signals = [
                 {"domain": "batch-test", "type": "✅", "message": "sig1"},
@@ -60,6 +71,7 @@ class TestSignalBus:
             assert results["batch-test"] is True
 
             from l4_kernel.kems import KemsPlane
+
             kems = KemsPlane(root)
             all_sigs = kems.read_signals()
             assert len(all_sigs) >= 3  # 至少 3 个信号
@@ -99,11 +111,16 @@ class TestSignalBus:
             root = Path(td)
             init_domain_kems(root, domain_name="测试", owner="test")
             reg = DomainRegistry()
-            reg.register(Domain(
-                id="viol-test", name="测试", domain_type="document",
-                path=root, bos_uri="bos://test/**",
-                kems_planes=["_control"],
-            ))
+            reg.register(
+                Domain(
+                    id="viol-test",
+                    name="测试",
+                    domain_type="document",
+                    path=root,
+                    bos_uri="bos://test/**",
+                    kems_planes=["_control"],
+                )
+            )
             bus = SignalBus(reg)
 
             violations = [
@@ -113,6 +130,7 @@ class TestSignalBus:
             bus.emit_violation_signal("viol-test", violations)
 
             from l4_kernel.kems import KemsPlane
+
             kems = KemsPlane(root)
             signals = kems.read_signals()
             assert len(signals) >= 1  # 至少有新信号
@@ -125,17 +143,23 @@ class TestSignalBus:
             root = Path(td)
             init_domain_kems(root, domain_name="测试", owner="test")
             reg = DomainRegistry()
-            reg.register(Domain(
-                id="clean-test", name="测试", domain_type="document",
-                path=root, bos_uri="bos://test/**",
-                kems_planes=["_control"],
-            ))
+            reg.register(
+                Domain(
+                    id="clean-test",
+                    name="测试",
+                    domain_type="document",
+                    path=root,
+                    bos_uri="bos://test/**",
+                    kems_planes=["_control"],
+                )
+            )
             bus = SignalBus(reg)
 
             # 无 violation
             bus.emit_violation_signal("clean-test", [])
 
             from l4_kernel.kems import KemsPlane
+
             kems = KemsPlane(root)
             signals = kems.read_signals()
             last_sig = signals[-1]

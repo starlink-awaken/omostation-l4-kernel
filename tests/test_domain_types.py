@@ -70,17 +70,20 @@ def make_domain(domain_type: str, path: Path, **kwargs) -> Domain:
 
 # ── DocumentDomain ──────────────────────────────────────────────────
 
+
 class TestDocumentDomain:
     def test_validate_kems_planes_all_present(self, temp_doc_domain):
-        d = wrap_domain(make_domain("document", temp_doc_domain,
-                                     kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"]))
+        d = wrap_domain(
+            make_domain(
+                "document", temp_doc_domain, kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"]
+            )
+        )
         assert isinstance(d, DocumentDomain)
         missing = d.validate_kems_planes()
         assert len(missing) == 0
 
     def test_validate_kems_planes_missing(self, temp_doc_domain):
-        d = wrap_domain(make_domain("document", temp_doc_domain,
-                                     kems_planes=["_control", "_runtime"]))
+        d = wrap_domain(make_domain("document", temp_doc_domain, kems_planes=["_control", "_runtime"]))
         missing = d.validate_kems_planes()
         assert "_runtime" in missing[0]
 
@@ -100,6 +103,7 @@ class TestDocumentDomain:
 
 
 # ── ConfigDomain ────────────────────────────────────────────────────
+
 
 class TestConfigDomain:
     def test_list_configs(self, temp_config_domain):
@@ -138,6 +142,7 @@ class TestConfigDomain:
 
 # ── ToolDomain ──────────────────────────────────────────────────────
 
+
 class TestToolDomain:
     def test_list_tools(self, temp_tool_domain):
         d = wrap_domain(make_domain("tool", temp_tool_domain))
@@ -160,6 +165,7 @@ class TestToolDomain:
 
 # ── WorkspaceDomain ─────────────────────────────────────────────────
 
+
 class TestWorkspaceDomain:
     def test_index_files(self, temp_config_domain):
         d = wrap_domain(make_domain("workspace", temp_config_domain))
@@ -179,6 +185,7 @@ class TestWorkspaceDomain:
 
 
 # ── StorageDomain ───────────────────────────────────────────────────
+
 
 class TestStorageDomain:
     def test_get_disk_usage_root(self):
@@ -203,6 +210,7 @@ class TestStorageDomain:
 
 # ── ModelDomain ─────────────────────────────────────────────────────
 
+
 class TestModelDomain:
     def test_list_models(self, temp_config_domain):
         d = wrap_domain(make_domain("model", temp_config_domain))
@@ -222,6 +230,7 @@ class TestModelDomain:
 
 
 # ── EngineDomain ────────────────────────────────────────────────────
+
 
 class TestEngineDomain:
     def test_check_process(self):
@@ -255,6 +264,7 @@ class TestEngineDomain:
 
 
 # ── wrap_domain ─────────────────────────────────────────────────────
+
 
 class TestWrapDomain:
     def test_wrap_document(self):
@@ -293,4 +303,6 @@ class TestWrapDomain:
             }
             expected = type_to_class.get(domain.domain_type)
             if expected:
-                assert isinstance(wrapped, expected), f"{domain.id}: expected {expected.__name__}, got {type(wrapped).__name__}"
+                assert isinstance(wrapped, expected), (
+                    f"{domain.id}: expected {expected.__name__}, got {type(wrapped).__name__}"
+                )

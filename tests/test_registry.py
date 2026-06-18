@@ -8,7 +8,9 @@ from l4_kernel import Domain, DomainRegistry
 class TestDomain:
     def test_create_document_domain(self):
         d = Domain(
-            id="vault", name="@学习进化", domain_type="document",
+            id="vault",
+            name="@学习进化",
+            domain_type="document",
             path=Path.home() / "Documents" / "@学习进化",
             bos_uri="bos://vault/**",
             kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
@@ -29,7 +31,9 @@ class TestDomain:
         assert d.exists() is True
 
     def test_exists_false_for_missing(self):
-        d = Domain(id="missing", name="Missing", domain_type="config", path=Path("/nonexistent"), bos_uri="bos://missing/**")
+        d = Domain(
+            id="missing", name="Missing", domain_type="config", path=Path("/nonexistent"), bos_uri="bos://missing/**"
+        )
         assert d.exists() is False
 
 
@@ -39,19 +43,35 @@ class TestDomainRegistry:
         reg = DomainRegistry()
         all_d = reg.list_all()
         expected_ids = {
-            "cockpit", "vault", "creative", "personal", "shared", "family",
-            "work-weijian", "work-guozhuan", "opc", "family-shared",
+            "cockpit",
+            "vault",
+            "creative",
+            "personal",
+            "shared",
+            "family",
+            "work-weijian",
+            "work-guozhuan",
+            "opc",
+            "family-shared",
             "obsidian-vault",
-            "ai-config", "agents-config", "icloud-sharedconf",
-            "bin", "toolbox-tools",
+            "ai-config",
+            "agents-config",
+            "icloud-sharedconf",
+            "bin",
+            "toolbox-tools",
             "sharedwork",
             "shareddisk",
-            "model-volume", "sharedmodel",
-            "minerva", "knowledge-engine",
-            "l4-kernel", "ecos-workbench", "runtime",
+            "model-volume",
+            "sharedmodel",
+            "minerva",
+            "knowledge-engine",
+            "l4-kernel",
+            "ecos-workbench",
+            "runtime",
         }
-        assert len(all_d) == len(expected_ids), \
+        assert len(all_d) == len(expected_ids), (
             f"Expected {len(expected_ids)} domains, got {len(all_d)}: {[d.id for d in all_d]}"
+        )
 
     def test_list_by_type_all_ids_known(self):
         reg = DomainRegistry()

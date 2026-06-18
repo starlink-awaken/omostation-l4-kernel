@@ -1,6 +1,5 @@
 """Tests for L4 Kernel Plugin System."""
 
-
 from l4_kernel.plugins import DocumentKemsPlugin, get_plugin_registry
 
 
@@ -49,9 +48,7 @@ class TestDocumentKemsPlugin:
         control = tmp_path / "_control"
         control.mkdir()
         (control / "STATE.md").write_text("---\nstatus: active\n---\n# STATE\n")
-        (control / "signals.md").write_text(
-            "---\nsignals: []\n---\n| 类型 | 日期 | 信号 |\n| ✅ | 2026-01-01 | ok |\n"
-        )
+        (control / "signals.md").write_text("---\nsignals: []\n---\n| 类型 | 日期 | 信号 |\n| ✅ | 2026-01-01 | ok |\n")
         result = plugin._action_state_review(tmp_path)
         assert result["action"] == "state_review"
 

@@ -43,5 +43,3 @@ def test_load_domain_index_empty_file(tmp_path):
         domains = load_domain_index()
         assert domains is not None
         assert len(domains) == 0
-
-

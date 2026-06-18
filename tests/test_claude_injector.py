@@ -44,11 +44,16 @@ def temp_domain_with_claude():
 @pytest.fixture
 def registry_with_temp_domain(temp_domain_with_claude):
     reg = DomainRegistry()
-    reg.register(Domain(
-        id="inject-test", name="测试域", domain_type="document",
-        path=temp_domain_with_claude, bos_uri="bos://test/**",
-        kems_planes=["_control"],
-    ))
+    reg.register(
+        Domain(
+            id="inject-test",
+            name="测试域",
+            domain_type="document",
+            path=temp_domain_with_claude,
+            bos_uri="bos://test/**",
+            kems_planes=["_control"],
+        )
+    )
     return reg
 
 

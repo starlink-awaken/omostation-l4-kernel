@@ -23,8 +23,12 @@ class TestDomainCreate:
     def test_create_document_domain(self, lifecycle):
         with tempfile.TemporaryDirectory() as td:
             result = lifecycle.create(
-                "test-create", "测试域", "document", td,
-                owner="test", description="测试用域",
+                "test-create",
+                "测试域",
+                "document",
+                td,
+                owner="test",
+                description="测试用域",
             )
             assert result["status"] == "ok"
             # 验证 KEMS 骨架
@@ -45,7 +49,11 @@ class TestDomainCreate:
     def test_create_non_document_domain(self, lifecycle):
         with tempfile.TemporaryDirectory() as td:
             result = lifecycle.create(
-                "test-config", "配置域", "config", td, owner="test",
+                "test-config",
+                "配置域",
+                "config",
+                td,
+                owner="test",
             )
             assert result["status"] == "ok"
             # config 域不应该创建 KEMS _control/

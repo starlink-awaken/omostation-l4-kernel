@@ -1,6 +1,5 @@
 """Tests for L4 Kernel DomainHealth."""
 
-
 from l4_kernel.health import DomainHealth
 from l4_kernel.registry import DomainRegistry
 
@@ -105,14 +104,19 @@ class TestCmdHealthExitCode:
     exit 0 = 全域存在(L4 健康) / exit 1 = 有 missing(异常)。
     修改此行为会破坏 X-Plane l4-kernel-mcp-sse 探针。
     """
+
     def test_cmd_health_returns_zero_when_all_present(self):
         """注入 mock registry 触发 all-present 场景。"""
         from l4_kernel.cli import cmd_health
         from l4_kernel.registry import DomainRegistry
+
         orig = DomainRegistry.aggregate_health
         DomainRegistry.aggregate_health = lambda self: {
-            "total": 21, "existing": 21, "missing": 0,
-            "by_type": {}, "health_rate": "100.0%",
+            "total": 21,
+            "existing": 21,
+            "missing": 0,
+            "by_type": {},
+            "health_rate": "100.0%",
         }
         try:
             rc = cmd_health([])
@@ -124,10 +128,14 @@ class TestCmdHealthExitCode:
         """注入 mock registry 触发 missing,验证 exit code 真的依赖 missing 计数。"""
         from l4_kernel.cli import cmd_health
         from l4_kernel.registry import DomainRegistry
+
         orig = DomainRegistry.aggregate_health
         DomainRegistry.aggregate_health = lambda self: {
-            "total": 21, "existing": 19, "missing": 2,
-            "by_type": {}, "health_rate": "90.5%",
+            "total": 21,
+            "existing": 19,
+            "missing": 2,
+            "by_type": {},
+            "health_rate": "90.5%",
         }
         try:
             rc = cmd_health([])
@@ -142,6 +150,7 @@ class TestCmdHealthExitCode:
         若该数字未来变化(治理改进),会提示治理层覆盖的进展。
         """
         from l4_kernel.cli import cmd_health
+
         rc = cmd_health([])
         # 真实状态:若 missing=0 → 0;否则 1。锁住"当前"
         assert rc in (0, 1)  # 只锁类型,不锁具体数(数值随治理会变)

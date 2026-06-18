@@ -29,6 +29,7 @@ class TestConcurrencyManager:
             path = Path(tf.name)
         try:
             import threading
+
             acquired = threading.Event()
             release = threading.Event()
 
@@ -154,6 +155,7 @@ class TestFederationHub:
     @pytest.fixture
     def hub(self):
         import tempfile
+
         config = Path(tempfile.mkdtemp()) / "federation.json"
         return FederationHub(node_id="test-node", config_path=config)
 
