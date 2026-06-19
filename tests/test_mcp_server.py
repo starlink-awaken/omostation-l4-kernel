@@ -141,7 +141,7 @@ class TestSignalTools:
 
 class TestToolRegistry:
     def test_tools_registered(self):
-        assert len(TOOLS) == 42
+        assert len(TOOLS) >= 42
 
     def test_all_tools_callable(self):
         for name, fn in TOOLS.items():

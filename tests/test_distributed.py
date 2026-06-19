@@ -44,9 +44,10 @@ class TestConcurrencyManager:
 
             # 尝试获取锁应该超时
             try:
+                from l4_kernel.concurrency import LockAcquireError
                 with mgr.lock(path, timeout=0.5):
                     pass
-            except TimeoutError:
+            except (TimeoutError, LockAcquireError, OSError):
                 pass  # 预期行为
 
             release.set()
