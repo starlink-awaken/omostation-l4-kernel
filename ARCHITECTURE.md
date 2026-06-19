@@ -43,11 +43,24 @@ graph TB
 
 | Module | Responsibility |
 |:--|:--|
-| `src/l4_kernel/registry.py` | DomainRegistry + DOMAIN-INDEX sync |
-| `src/l4_kernel/mcp_server.py` | MCP server |
-| `src/l4_kernel/kems.py` | KEMS six-plane + Cards plane |
-| `src/l4_kernel/health.py` | Cross-domain health aggregation |
-| `src/l4_kernel/signals.py` | Cross-domain SignalBus |
+| `registry.py` | DomainRegistry + DOMAIN-INDEX sync |
+| `domain_types.py` | 7 种域类型特化 (Document/Config/Tool/...) |
+| `domain_plugins.py` | 域插件注册与发现 |
+| `mcp_server.py` | MCP server (42 tools) |
+| `kems.py` | KEMS six-plane + Cards plane |
+| `health.py` | Cross-domain health aggregation |
+| `signals.py` | Cross-domain SignalBus |
+| `lifecycle.py` | 域生命周期管理 |
+| `concurrency.py` | 并发控制原语 |
+| `consistency.py` | 跨域一致性检查 |
+| `distributed.py` | 分布式协调 |
+| `federation.py` | 域联邦机制 |
+| `plugins.py` | 插件加载框架 |
+| `skill_loader.py` | 技能加载器 |
+| `templates.py` | 域骨架生成 + KEMS 版本迁移 |
+| `claude_injector.py` | Claude 上下文注入 |
+| `workflows.py` | 工作流引擎 |
+| `cli.py` | CLI 入口 |
 
 ## 4. 测试
 

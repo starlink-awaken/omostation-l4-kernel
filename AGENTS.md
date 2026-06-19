@@ -55,5 +55,5 @@ uv run pytest tests/ -q
 
 ## File Organization
 
-- `src/l4_kernel/` — 8 个源文件
+- `src/l4_kernel/` — 19 个源文件
 - `tests/` — 测试文件
