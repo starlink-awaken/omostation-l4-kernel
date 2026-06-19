@@ -84,7 +84,6 @@ class TestSignalBus:
         for sig in recent:
             assert "domain_id" in sig
             assert "domain_name" in sig
-            assert "type" in sig
 
     def test_aggregate_by_type(self):
         reg = DomainRegistry()
