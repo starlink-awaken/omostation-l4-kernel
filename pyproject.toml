@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "MIT" }
 dependencies = [
-    "pyyaml>=6.0",
+    "pyyaml>=6.0.3",
     "model-driven",
     "bus-foundation",
 ]
@@ -45,7 +45,7 @@ quote-style = "double"
 
 [tool.uv.sources]
 model-driven = { path = "../model-driven", editable = true }
-bus-foundation = { path = "../bus-foundation", editable = true }
+bus-foundation = { path = "../bus-foundation" }
 
 [dependency-groups]
 dev = [
