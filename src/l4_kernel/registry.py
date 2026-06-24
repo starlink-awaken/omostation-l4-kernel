@@ -242,6 +242,13 @@ _BUILTIN_DOMAINS: list[Domain] = [
             "drift.self_evolve_planned_only",  # self-evolution 任务仅落 planned/ + approval_required=true
             "audit.5repos_section17",  # .omo/_delivery/audit-rollout/{date}-5repos.json
             "audit.8_field_review_template",  # .omo/standards/opc-review-template.md
+            # 2026-06-23 P60 治理方法论内化 — 6 个 governance capability:
+            "gov.frontmatter_audit",  # omo lint doc-lifecycle → frontmatter 覆盖率 ≥ 95%
+            "gov.drift_monitor",  # bin/mof-drift → LOW 维度 ≤ 5
+            "gov.commit_closure",  # git status --short | wc -l → 工作树累积 ≤ 50
+            "gov.dimension_saturation",  # linter 维度 ≥ 15 时强制用 bin 工具
+            "gov.adr_index_integrity",  # omo audit → ADR INDEX 无 UNLISTED
+            "gov.rise_cycle",  # RISE 循环 (R+I+S+E+C) governance-phase-orchestrator
         ],
     ),
     # ── FamilyShared (DocumentDomain) ──
