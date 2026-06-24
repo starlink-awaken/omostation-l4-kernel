@@ -253,6 +253,7 @@ def cmd_health(args: list[str]) -> int:
 
 def main() -> int:
     """l4-kernel CLI 入口。"""
+    print("⚠️ L4 Kernel 独立 CLI 已弃用，请使用 cockpit 替代", file=sys.stderr)
     args = sys.argv[1:]
 
     if not args or args[0] in ("--help", "-h"):
