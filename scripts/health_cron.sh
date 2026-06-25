@@ -3,8 +3,8 @@
 #
 # 使用方式:
 #   1. 添加到 crontab: crontab -e
-#   2. 添加以下行（每天凌晨 2 点运行）:
-#      0 2 * * * /Users/xiamingxing/Workspace/projects/l4-kernel/scripts/health_cron.sh
+#   2. 添加以下行（每 6 小时运行）:
+#      0 */6 * * * /Users/xiamingxing/Workspace/projects/l4-kernel/scripts/health_cron.sh
 #
 # 或者手动运行:
 #   ./scripts/health_cron.sh
@@ -29,7 +29,21 @@ echo "========================================" | tee -a "$LOG_FILE"
 
 cd "$PROJECT_DIR"
 
-# 1. 运行健康监控脚本
+# 1. 信号清理（每周一次，周日凌晨 2 点）
+if [ "$(date +%u)" = "7" ] && [ "$(date +%H)" = "02" ]; then
+    echo "" | tee -a "$LOG_FILE"
+    echo "## 0. 信号清理（每周一次）" | tee -a "$LOG_FILE"
+    python3 scripts/signal_cleanup.py --days 7 2>&1 | tee -a "$LOG_FILE"
+fi
+
+# 2. 信号聚合（每天凌晨 2 点）
+if [ "$(date +%H)" = "02" ]; then
+    echo "" | tee -a "$LOG_FILE"
+    echo "## 0. 信号聚合（每天一次）" | tee -a "$LOG_FILE"
+    python3 scripts/signal_aggregate.py --window 5 2>&1 | tee -a "$LOG_FILE"
+fi
+
+# 3. 运行健康监控脚本
 echo "" | tee -a "$LOG_FILE"
 echo "## 1. 健康检查" | tee -a "$LOG_FILE"
 python3 scripts/health_monitor.py --output json > "$HEALTH_REPORT" 2>&1
@@ -41,7 +55,7 @@ else
     echo "⚠️ 健康检查发现问题" | tee -a "$LOG_FILE"
 fi
 
-# 2. 运行历史趋势分析
+# 4. 运行历史趋势分析
 echo "" | tee -a "$LOG_FILE"
 echo "## 2. 历史趋势分析" | tee -a "$LOG_FILE"
 python3 scripts/health_trend.py --days 7 --output json > "$TREND_REPORT" 2>&1
@@ -53,7 +67,7 @@ else
     echo "⚠️ 趋势分析发现异常" | tee -a "$LOG_FILE"
 fi
 
-# 3. 运行跨域信号分析
+# 5. 运行跨域信号分析
 echo "" | tee -a "$LOG_FILE"
 echo "## 3. 跨域信号分析" | tee -a "$LOG_FILE"
 python3 scripts/signal_analysis.py --hours 72 --output json > "$SIGNAL_REPORT" 2>&1
@@ -65,7 +79,7 @@ else
     echo "⚠️ 信号分析发现风险" | tee -a "$LOG_FILE"
 fi
 
-# 4. 生成综合报告
+# 6. 生成综合报告
 echo "" | tee -a "$LOG_FILE"
 echo "## 4. 综合报告" | tee -a "$LOG_FILE"
 
@@ -80,7 +94,7 @@ echo "  信号数: $TOTAL_SIGNALS" | tee -a "$LOG_FILE"
 echo "  趋势异常: $ANOMALIES" | tee -a "$LOG_FILE"
 echo "  风险数: $RISKS" | tee -a "$LOG_FILE"
 
-# 5. 发送告警（如果有问题）
+# 7. 发送告警（如果有问题）
 echo "" | tee -a "$LOG_FILE"
 echo "## 5. 告警检查" | tee -a "$LOG_FILE"
 
