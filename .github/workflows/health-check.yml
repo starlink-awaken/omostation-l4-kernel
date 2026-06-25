@@ -1,0 +1,100 @@
+name: L4 Domain Health Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/l4_kernel/**'
+      - 'tests/**'
+      - 'scripts/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/l4_kernel/**'
+      - 'tests/**'
+      - 'scripts/**'
+  schedule:
+    # 每天凌晨 2 点运行
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    # 支持手动触发
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.13']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: |
+          cd projects/l4-kernel
+          uv sync
+
+      - name: Run tests
+        run: |
+          cd projects/l4-kernel
+          uv run pytest tests/ -q --tb=short
+
+      - name: Run health check
+        run: |
+          cd projects/l4-kernel
+          python scripts/health_monitor.py --output json > health_report.json
+        continue-on-error: true
+
+      - name: Upload health report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: health-report
+          path: projects/l4-kernel/health_report.json
+          retention-days: 30
+
+      - name: Check health status
+        run: |
+          cd projects/l4-kernel
+          if [ -f health_report.json ]; then
+            python3 -c "
+          import json
+          import sys
+
+          with open('health_report.json') as f:
+              data = json.load(f)
+
+          unhealthy = [d for d in data['domains'] if not d['fresh']]
+          if unhealthy:
+              print(f'发现 {len(unhealthy)} 个不健康的域:')
+              for d in unhealthy:
+                  print(f'  - {d[\"id\"]}: {d[\"issue_count\"]} 个问题')
+              sys.exit(1)
+          else:
+              print(f'所有 {data[\"total_domains\"]} 个域健康状态正常')
+          "
+          fi
+
+      - name: Send notification on failure
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#alerts'
+          text: |
+            L4 Domain Health Check Failed
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
