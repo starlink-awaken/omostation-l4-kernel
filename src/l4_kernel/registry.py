@@ -1,4 +1,4 @@
-"""L4 Domain Registry — 24域统一注册表。
+"""L4 Domain Registry — 25域统一注册表。
 
 SSOT: ~/Documents/@驾驶舱/_control/DOMAIN-INDEX.md (如果不存在则使用硬编码默认值)
 与 L0 MOF M1 domain/DOMAIN-*.yaml 互补: Registry 管理文件系统路径, MOF 管理语义模型。
@@ -43,7 +43,7 @@ class Domain:
         }
 
 
-# ── 内置 24 域默认注册表 (SSOT 回退) ──────────────────────────────
+# ── 内置 25 域默认注册表 (SSOT 回退) ──────────────────────────────
 # ⚠️ 新增域需同时更新三处:
 #  1. 此处 _BUILTIN_DOMAINS (l4-kernel 注册表)
 #  2. DOMAIN-INDEX.md (L4 域注册表)
@@ -101,6 +101,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://shared/**",
         kems_planes=["_control", "_entities", "_knowledge", "_runtime"],
         governance_tier=2,
+        capabilities=["knowledge.read", "knowledge.search", "entity.resolve"],
     ),
     Domain(
         id="family",
@@ -110,6 +111,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://family/**",
         kems_planes=["_control", "_knowledge", "_storage"],
         governance_tier=2,
+        capabilities=["knowledge.read", "task.track"],
     ),
     Domain(
         id="work-weijian",
@@ -118,7 +120,8 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / "Documents" / "@工作文档" / "卫健委",
         bos_uri="bos://work-weijian/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive", "_runtime"],
-        governance_tier=2,
+        governance_tier=1,
+        capabilities=["knowledge.read", "document.generate", "task.manage"],
     ),
     Domain(
         id="work-guozhuan",
@@ -127,7 +130,19 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / "Documents" / "@工作文档" / "国转中心",
         bos_uri="bos://work-guozhuan/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive", "_runtime"],
-        governance_tier=2,
+        governance_tier=1,
+        capabilities=["knowledge.read", "research.run", "task.manage"],
+    ),
+    # ── @工作文档 聚合域 (L0 MOF: DOMAIN-work-docs) ──
+    Domain(
+        id="work-docs",
+        name="@工作文档",
+        domain_type="document",
+        path=Path.home() / "Documents" / "@工作文档",
+        bos_uri="bos://work-docs/**",
+        kems_planes=["_control", "_entities", "_knowledge", "_storage"],
+        governance_tier=1,
+        capabilities=["domain.route", "knowledge.read", "knowledge.search"],
     ),
     # ── ConfigDomain (3域) ──
     Domain(
@@ -136,6 +151,8 @@ _BUILTIN_DOMAINS: list[Domain] = [
         domain_type="config",
         path=Path.home() / ".ai",
         bos_uri="bos://ai-config/**",
+        governance_tier=2,
+        capabilities=["config.read", "config.write"],
     ),
     Domain(
         id="agents-config",
@@ -143,6 +160,8 @@ _BUILTIN_DOMAINS: list[Domain] = [
         domain_type="config",
         path=Path.home() / ".agents",
         bos_uri="bos://agents-config/**",
+        governance_tier=2,
+        capabilities=["config.read", "config.write"],
     ),
     Domain(
         id="icloud-sharedconf",
@@ -150,6 +169,8 @@ _BUILTIN_DOMAINS: list[Domain] = [
         domain_type="config",
         path=Path.home() / "SharedConf",
         bos_uri="bos://icloud-sharedconf/**",
+        governance_tier=3,
+        capabilities=["config.read"],
     ),
     # ── ToolDomain (2域) ──
     Domain(
@@ -158,6 +179,8 @@ _BUILTIN_DOMAINS: list[Domain] = [
         domain_type="tool",
         path=Path.home() / "bin",
         bos_uri="bos://bin/**",
+        governance_tier=2,
+        capabilities=["tool.execute", "tool.list"],
     ),
     Domain(
         id="toolbox-tools",
@@ -165,14 +188,18 @@ _BUILTIN_DOMAINS: list[Domain] = [
         domain_type="tool",
         path=Path.home() / "ToolBox",
         bos_uri="bos://toolbox-tools/**",
+        governance_tier=2,
+        capabilities=["tool.execute", "tool.list"],
     ),
-    # ── WorkspaceDomain (1域) ──
+    # ── WorkspaceDomain (5域) ──
     Domain(
         id="sharedwork",
         name="SharedWork",
         domain_type="workspace",
         path=Path("/Users") / "SharedWork",
         bos_uri="bos://sharedwork/**",
+        governance_tier=3,
+        capabilities=["workspace.read", "workspace.write"],
     ),
     # ── StorageDomain (1域) ──
     Domain(
@@ -181,6 +208,8 @@ _BUILTIN_DOMAINS: list[Domain] = [
         domain_type="storage",
         path=Path("/Volumes") / "SharedDisk",
         bos_uri="bos://shareddisk/**",
+        governance_tier=3,
+        capabilities=["storage.read", "storage.write"],
     ),
     # ── ModelDomain (2域) ──
     Domain(
@@ -189,6 +218,8 @@ _BUILTIN_DOMAINS: list[Domain] = [
         domain_type="model",
         path=Path("/Volumes") / "Model",
         bos_uri="bos://model-volume/**",
+        governance_tier=3,
+        capabilities=["model.read", "model.list"],
     ),
     Domain(
         id="sharedmodel",
@@ -196,14 +227,18 @@ _BUILTIN_DOMAINS: list[Domain] = [
         domain_type="model",
         path=Path("/Volumes") / "SharedModel",
         bos_uri="bos://sharedmodel/**",
+        governance_tier=3,
+        capabilities=["model.read", "model.list"],
     ),
-    # ── EngineDomain (2域) ──
+    # ── EngineDomain (3域) ──
     Domain(
         id="minerva",
         name="Minerva 引擎",
         domain_type="engine",
         path=Path.home() / "minerva",
         bos_uri="bos://minerva/**",
+        governance_tier=2,
+        capabilities=["engine.start", "engine.stop", "engine.status"],
     ),
     Domain(
         id="knowledge-engine",
@@ -211,6 +246,8 @@ _BUILTIN_DOMAINS: list[Domain] = [
         domain_type="engine",
         path=Path.home() / "knowledge",
         bos_uri="bos://knowledge-engine/**",
+        governance_tier=2,
+        capabilities=["engine.start", "engine.stop", "engine.status"],
     ),
     # ── Obsidian Vault (DocumentDomain) ──
     Domain(
@@ -221,6 +258,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://obsidian-vault/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
         governance_tier=3,
+        capabilities=["knowledge.read", "knowledge.search"],
     ),
     # ── OPC (DocumentDomain, 新增 2026-06-10, 2026-06-13 P5-P7 self-correction 扩展) ──
     Domain(
@@ -260,6 +298,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://family-shared/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage"],
         governance_tier=2,
+        capabilities=["knowledge.read", "knowledge.search"],
     ),
     # ── L4 Kernel (EngineDomain) ──
     Domain(
@@ -269,6 +308,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / "Workspace" / "projects" / "l4-kernel",
         bos_uri="bos://l4-kernel/**",
         governance_tier=1,
+        capabilities=["domain.register", "domain.health", "domain.validate"],
     ),
     # ── eCOS Workbench (WorkspaceDomain) ──
     Domain(
@@ -278,6 +318,27 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / "Workspace",
         bos_uri="bos://ecos/**",
         governance_tier=1,
+        capabilities=["workspace.read", "workspace.write", "workspace.search"],
+    ),
+    # ── OMO Governance (WorkspaceDomain) ──
+    Domain(
+        id="omo-governance",
+        name="OMO Governance",
+        domain_type="workspace",
+        path=Path.home() / "Workspace" / ".omo",
+        bos_uri="bos://omo-governance/**",
+        governance_tier=1,
+        capabilities=["governance.read", "governance.write", "governance.audit"],
+    ),
+    # ── Spaces (WorkspaceDomain) ──
+    Domain(
+        id="spaces",
+        name="Spaces",
+        domain_type="workspace",
+        path=Path.home() / "Workspace" / "spaces",
+        bos_uri="bos://spaces/**",
+        governance_tier=1,
+        capabilities=["space.read", "space.write", "space.admission"],
     ),
     # ── Runtime Data (WorkspaceDomain) ──
     Domain(
@@ -287,12 +348,13 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / "runtime",
         bos_uri="bos://runtime/**",
         governance_tier=1,
+        capabilities=["runtime.read", "runtime.write", "runtime.log"],
     ),
 ]
 
 
 class DomainRegistry:
-    """L4 21 域统一注册表。
+    """L4 25 域统一注册表。
 
     内置默认注册表基于 CLAUDE_COWORK_GLOBAL.md v6.0。
     可通过 load_from_index() 从 DOMAIN-INDEX.md 加载覆盖。
@@ -310,7 +372,7 @@ class DomainRegistry:
         return self._domains.get(domain_id)
 
     def list_all(self) -> list[Domain]:
-        """列出所有 19 域。"""
+        """列出所有 25 域。"""
         return list(self._domains.values())
 
     def list_by_type(self, domain_type: DomainType) -> list[Domain]:

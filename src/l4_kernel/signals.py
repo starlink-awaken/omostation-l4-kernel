@@ -159,6 +159,8 @@ class SignalBus:
                 continue
             kems = KemsPlane(d.path)
             signals = kems.read_signals()
+            if not signals:
+                continue
             for sig in signals:
                 ts = sig.get("ts", "")
                 if ts:

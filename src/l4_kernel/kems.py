@@ -112,7 +112,8 @@ class KemsPlane:
         """读取 signals.md 信号列表。"""
         data = self._read_yaml_md("signals.md")
         if isinstance(data, dict):
-            return data.get("signals", [])
+            signals = data.get("signals", [])
+            return signals if isinstance(signals, list) else []
         if isinstance(data, list):
             return data
         return []

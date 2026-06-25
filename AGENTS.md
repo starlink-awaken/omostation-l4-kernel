@@ -14,7 +14,7 @@ make install  # uv sync
 
 ## Architecture
 
-L4 Kernel 是 L4 自我层的管理面。它为 19 个域提供统一的 CRUD 接口。
+L4 Kernel 是 L4 自我层的管理面。它为 25 个域提供统一的 CRUD 接口。
 
 ### 调用关系
 
@@ -33,7 +33,7 @@ l4-kernel 不依赖任何 eCOS 项目
 
 | 模块 | 职责 |
 |------|------|
-| registry.py | DomainRegistry — 19域注册 + DOMAIN-INDEX.md 同步 |
+| registry.py | DomainRegistry — 25域注册 + DOMAIN-INDEX.md 同步 |
 | domain_types.py | 7种域类型特化 (Document/Config/Tool/...) |
 | kems.py | KemsPlane — DocumentDomain 六面读写 + CardsPlane |
 | health.py | DomainHealth — 跨域健康聚合 |

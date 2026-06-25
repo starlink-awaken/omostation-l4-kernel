@@ -51,6 +51,7 @@ class TestDomainRegistry:
             "family",
             "work-weijian",
             "work-guozhuan",
+            "work-docs",
             "opc",
             "family-shared",
             "obsidian-vault",
@@ -67,6 +68,8 @@ class TestDomainRegistry:
             "knowledge-engine",
             "l4-kernel",
             "ecos-workbench",
+            "omo-governance",
+            "spaces",
             "runtime",
         }
         assert len(all_d) == len(expected_ids), (
@@ -86,7 +89,7 @@ class TestDomainRegistry:
     def test_list_by_type_document(self):
         reg = DomainRegistry()
         docs = reg.list_by_type("document")
-        assert len(docs) == 11  # 8 original + obsidian-vault + opc + family-shared
+        assert len(docs) == 12  # 9 original + obsidian-vault + opc + family-shared + work-docs
 
     def test_list_by_type_config(self):
         reg = DomainRegistry()
@@ -101,7 +104,7 @@ class TestDomainRegistry:
     def test_list_by_type_workspace(self):
         reg = DomainRegistry()
         workspaces = reg.list_by_type("workspace")
-        assert len(workspaces) == 3  # sharedwork + ecos-workbench + runtime
+        assert len(workspaces) == 5  # sharedwork + ecos-workbench + runtime + omo-governance + spaces
 
     def test_get_vault(self):
         reg = DomainRegistry()
@@ -167,7 +170,7 @@ class TestDomainRegistry:
     def test_list_document_domains(self):
         reg = DomainRegistry()
         docs = reg.list_document_domains()
-        assert len(docs) == 11  # 8 original + obsidian-vault + opc + family-shared
+        assert len(docs) == 12  # 9 original + obsidian-vault + opc + family-shared + work-docs
         assert all(d.domain_type == "document" for d in docs)
 
     def test_work_weijian_path(self):
