@@ -61,7 +61,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://cockpit/**",
         kems_planes=["_control", "_knowledge", "_runtime", "_generated", "_meta", "_archive"],
         governance_tier=1,
-        capabilities=["knowledge.read", "knowledge.search", "cards.manage"],
+        capabilities=["knowledge.read", "knowledge.search", "cards.manage", "governance.read", "governance.audit", "signal.emit"],
     ),
     Domain(
         id="vault",
@@ -71,7 +71,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://vault/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
         governance_tier=1,
-        capabilities=["knowledge.read", "knowledge.search", "knowledge.archive"],
+        capabilities=["knowledge.read", "knowledge.search", "knowledge.archive", "knowledge.create", "knowledge.update", "knowledge.delete"],
     ),
     Domain(
         id="creative",
@@ -81,7 +81,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://creative/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
         governance_tier=1,
-        capabilities=["knowledge.read", "knowledge.search"],
+        capabilities=["knowledge.read", "knowledge.search", "creative.create", "creative.publish", "creative.archive"],
     ),
     Domain(
         id="personal",
@@ -91,7 +91,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://personal/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
         governance_tier=1,
-        capabilities=["knowledge.read", "knowledge.search"],
+        capabilities=["knowledge.read", "knowledge.search", "personal.read", "personal.write", "personal.search"],
     ),
     Domain(
         id="shared",
@@ -101,7 +101,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://shared/**",
         kems_planes=["_control", "_entities", "_knowledge", "_runtime"],
         governance_tier=2,
-        capabilities=["knowledge.read", "knowledge.search", "entity.resolve"],
+        capabilities=["knowledge.read", "knowledge.search", "entity.resolve", "shared.read", "shared.write", "shared.search"],
     ),
     Domain(
         id="family",
@@ -111,7 +111,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://family/**",
         kems_planes=["_control", "_knowledge", "_storage"],
         governance_tier=2,
-        capabilities=["knowledge.read", "task.track"],
+        capabilities=["knowledge.read", "task.track", "family.read", "family.write", "family.search"],
     ),
     Domain(
         id="work-weijian",
@@ -121,7 +121,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://work-weijian/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive", "_runtime"],
         governance_tier=1,
-        capabilities=["knowledge.read", "document.generate", "task.manage"],
+        capabilities=["knowledge.read", "document.generate", "task.manage", "document.read", "document.write", "document.search"],
     ),
     Domain(
         id="work-guozhuan",
@@ -131,7 +131,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://work-guozhuan/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive", "_runtime"],
         governance_tier=1,
-        capabilities=["knowledge.read", "research.run", "task.manage"],
+        capabilities=["knowledge.read", "research.run", "task.manage", "document.read", "document.write", "document.search"],
     ),
     # ── @工作文档 聚合域 (L0 MOF: DOMAIN-work-docs) ──
     Domain(
@@ -142,7 +142,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://work-docs/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage"],
         governance_tier=1,
-        capabilities=["domain.route", "knowledge.read", "knowledge.search"],
+        capabilities=["domain.route", "knowledge.read", "knowledge.search", "document.read", "document.write", "document.search"],
     ),
     # ── ConfigDomain (3域) ──
     Domain(
@@ -152,7 +152,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / ".ai",
         bos_uri="bos://ai-config/**",
         governance_tier=2,
-        capabilities=["config.read", "config.write"],
+        capabilities=["config.read", "config.write", "config.validate", "config.backup"],
     ),
     Domain(
         id="agents-config",
@@ -161,7 +161,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / ".agents",
         bos_uri="bos://agents-config/**",
         governance_tier=2,
-        capabilities=["config.read", "config.write"],
+        capabilities=["config.read", "config.write", "config.validate", "config.backup"],
     ),
     Domain(
         id="icloud-sharedconf",
@@ -170,7 +170,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / "SharedConf",
         bos_uri="bos://icloud-sharedconf/**",
         governance_tier=3,
-        capabilities=["config.read"],
+        capabilities=["config.read", "config.validate"],
     ),
     # ── ToolDomain (2域) ──
     Domain(
@@ -180,7 +180,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / "bin",
         bos_uri="bos://bin/**",
         governance_tier=2,
-        capabilities=["tool.execute", "tool.list"],
+        capabilities=["tool.execute", "tool.list", "tool.install", "tool.uninstall", "tool.update"],
     ),
     Domain(
         id="toolbox-tools",
@@ -189,7 +189,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / "ToolBox",
         bos_uri="bos://toolbox-tools/**",
         governance_tier=2,
-        capabilities=["tool.execute", "tool.list"],
+        capabilities=["tool.execute", "tool.list", "tool.install", "tool.uninstall", "tool.update"],
     ),
     # ── WorkspaceDomain (5域) ──
     Domain(
@@ -199,7 +199,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path("/Users") / "SharedWork",
         bos_uri="bos://sharedwork/**",
         governance_tier=3,
-        capabilities=["workspace.read", "workspace.write"],
+        capabilities=["workspace.read", "workspace.write", "workspace.create", "workspace.delete", "workspace.archive"],
     ),
     # ── StorageDomain (1域) ──
     Domain(
@@ -209,7 +209,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path("/Volumes") / "SharedDisk",
         bos_uri="bos://shareddisk/**",
         governance_tier=3,
-        capabilities=["storage.read", "storage.write"],
+        capabilities=["storage.read", "storage.write", "storage.create", "storage.delete", "storage.archive"],
     ),
     # ── ModelDomain (2域) ──
     Domain(
@@ -219,7 +219,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path("/Volumes") / "Model",
         bos_uri="bos://model-volume/**",
         governance_tier=3,
-        capabilities=["model.read", "model.list"],
+        capabilities=["model.read", "model.list", "model.create", "model.delete", "model.archive"],
     ),
     Domain(
         id="sharedmodel",
@@ -228,7 +228,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path("/Volumes") / "SharedModel",
         bos_uri="bos://sharedmodel/**",
         governance_tier=3,
-        capabilities=["model.read", "model.list"],
+        capabilities=["model.read", "model.list", "model.create", "model.delete", "model.archive"],
     ),
     # ── EngineDomain (3域) ──
     Domain(
@@ -238,7 +238,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / "minerva",
         bos_uri="bos://minerva/**",
         governance_tier=2,
-        capabilities=["engine.start", "engine.stop", "engine.status"],
+        capabilities=["engine.start", "engine.stop", "engine.status", "engine.restart", "engine.config", "engine.log"],
     ),
     Domain(
         id="knowledge-engine",
@@ -247,7 +247,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         path=Path.home() / "knowledge",
         bos_uri="bos://knowledge-engine/**",
         governance_tier=2,
-        capabilities=["engine.start", "engine.stop", "engine.status"],
+        capabilities=["engine.start", "engine.stop", "engine.status", "engine.restart", "engine.config", "engine.log"],
     ),
     # ── Obsidian Vault (DocumentDomain) ──
     Domain(
@@ -258,7 +258,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://obsidian-vault/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
         governance_tier=3,
-        capabilities=["knowledge.read", "knowledge.search"],
+        capabilities=["knowledge.read", "knowledge.search", "knowledge.create", "knowledge.update", "knowledge.delete"],
     ),
     # ── OPC (DocumentDomain, 新增 2026-06-10, 2026-06-13 P5-P7 self-correction 扩展) ──
     Domain(
@@ -298,7 +298,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://family-shared/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage"],
         governance_tier=2,
-        capabilities=["knowledge.read", "knowledge.search"],
+        capabilities=["knowledge.read", "knowledge.search", "knowledge.create", "knowledge.update", "knowledge.delete"],
     ),
     # ── L4 Kernel (EngineDomain) ──
     Domain(
