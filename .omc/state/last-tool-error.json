@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd projects/l4-kernel && PYTHONPATH=src:../model-driven/src .venv/bin/python -c \\\"\\nfrom l4_kernel.lifecycle import DomainLifecycle\\ndl = DomainLifecycle(domain_id='test-domain')\\n# Test c...",
-  "error": "Exit code 1\n(eval):cd:1: no such file or directory: projects/l4-kernel",
-  "timestamp": "2026-06-09T02:33:35.448Z",
-  "retry_count": 1
-}
