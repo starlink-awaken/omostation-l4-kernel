@@ -1,68 +1,51 @@
-# AGENTS.md — L4 Kernel Development Guide
+# AGENTS.md — L4 Kernel
 
-> eCOS v5 L4 Self Layer · Domain Management Kernel
+    > Scope: project-local developer guide for `l4-kernel`.
+    > Workspace rules live in [`../../AGENTS.md`](../../AGENTS.md); project metadata lives in [`../../docs/project-registry.yaml`](../../docs/project-registry.yaml).
 
-## Quick Commands
+    ## Role
 
-```bash
-cd projects/l4-kernel
-make test     # 测试
-make lint     # ruff check
-make fmt      # ruff format
-make install  # uv sync
-```
+    - Layer: L4
+    - Stack: Python / uv / pytest
+    - Responsibility: 自我层管理面与域统一注册
 
-## Architecture
+    Do not copy volatile facts such as test counts, tool counts, service counts, ports, or current health into this file.
 
-L4 Kernel 是 L4 自我层的管理面。它为 25 个域提供统一的 CRUD 接口。
+    ## Before Editing
 
-### 调用关系
+    1. Read this file and [`CLAUDE.md`](CLAUDE.md) when it exists.
+    2. Check `git status --short` inside this project and at the workspace root.
+    3. Read the specific source or tests you are about to change.
+    4. Prefer project-local commands and targeted tests.
 
-```
-l4-kernel (L4 管理面)
-    ↑ import
-    ├── cockpit (L3) → MCP tools 调用
-    ├── metaos (L2)  → cards_context
-    ├── minerva (L2) → VaultSink
-    └── omo (L2)     → 域审计
+    ## Commands
 
-l4-kernel 不依赖任何 eCOS 项目
-```
+    ```bash
+    uv sync
+uv run pytest "tests/" -q
+uv run ruff check "src/"
+    ```
 
-### 模块职责
+    ## Key Files
 
-| 模块 | 职责 |
-|------|------|
-| registry.py | DomainRegistry — 25域注册 + DOMAIN-INDEX.md 同步 |
-| domain_types.py | 7种域类型特化 (Document/Config/Tool/...) |
-| kems.py | KemsPlane — DocumentDomain 六面读写 + CardsPlane |
-| health.py | DomainHealth — 跨域健康聚合 |
-| schema.py | DomainValidator — 与 M1 Schema 对比校验 |
-| templates.py | 域骨架生成 + KEMS 版本迁移 |
-| signals.py | 跨域信号总线 |
-| cli.py | CLI 入口 |
+    - `src/l4_kernel/registry.py`
+- `src/l4_kernel/mcp_server.py`
+- `src/l4_kernel/`
 
-## Key Dependencies
+    ## Gotchas
 
-- **pyyaml** — 唯一外部依赖
-- 无 eCOS 项目依赖
+    - `域数量和域清单以 registry 与 L0/MOF 模型为准。`
+- 不要在项目说明里复制个人目录全量清单。
 
-## Testing Pattern
+    ## Verification
 
-```bash
-uv run pytest tests/ -q
-```
+    - Documentation-only changes: run `uv run --with "pyyaml" python "../../bin/doc-ssot-lint.py" --json` from this project or from the workspace root.
+    - Code changes: run the narrowest relevant project test first, then broaden if shared contracts changed.
+    - Cross-layer behavior: verify the caller and the callee, not just the touched module.
 
-## File Organization
+    ## SSOT Pointers
 
-- `src/l4_kernel/` — 19 个源文件
-- `tests/` — 测试文件
-
-## Workspace-Wide Governance (2026-06-24)
-
-This project follows the workspace-level governance conventions documented in the root `AGENTS.md`:
-
-- **Agent Mutation Protocol**: Any autonomous agent/cron/daemon that modifies workspace state must emit `agent_mutation_intent`, avoid direct file I/O to `.omo/`/`spaces/`, and commit immediately. See `.omo/standards/agent-mutation-protocol.md` for the full protocol.
-- **SSOT Guardian**: Run `python3 bin/ssot-guardian.py` from the workspace root before committing to detect task-count, current-wave, submodule-pointer, or direct-omo-io drift.
-- **direct-omo-io**: Scripts must route writes to `.omo/` through `omo CLI`, `projects/omo` core, or `projects/c2g` ingress — never via raw `open()/mkdir()/write_text()`.
-- **Submodule Governance**: Commit changes inside the submodule first, then bump the root-repo pointer; `git submodule status` with a `+` prefix indicates pending drift.
+    - Workspace architecture: [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md)
+    - Layer index: [`../../LAYER-INDEX.md`](../../LAYER-INDEX.md)
+    - Project metadata: [`../../docs/project-registry.yaml`](../../docs/project-registry.yaml)
+    - Runtime state: [`../../.omo/state/system.yaml`](../../.omo/state/system.yaml)

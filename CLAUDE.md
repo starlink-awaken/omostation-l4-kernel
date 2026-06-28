@@ -1,51 +1,43 @@
-# CLAUDE.md — L4 Kernel
+# CLAUDE.md — L4 Kernel AI Context
 
-> eCOS v5 L4 Self Layer · 管理面 · 19域统一注册 + KEMS六面操作
+    > Session loader for AI work inside `l4-kernel`.
+    > Keep durable engineering rules in [`AGENTS.md`](AGENTS.md) and volatile facts in SSOT files.
 
----
+    ## Load First
 
-## 项目身份
+    1. [`AGENTS.md`](AGENTS.md)
+    2. [`README.md`](README.md) when present
+    3. The source files and tests directly related to the task
+    4. Workspace context in [`../../CLAUDE.md`](../../CLAUDE.md) when the task crosses project boundaries
 
-l4-kernel 是 L4 自我层的**管理面**。它为 25 个域提供统一的注册、读写、校验和健康聚合。
+    ## Project Role
 
-**核心职责**：
-1. **DomainRegistry** — 19 域统一注册，与 DOMAIN-INDEX.md 双向同步
-2. **KemsPlane** — DocumentDomain 六面文件统一读写
-3. **DomainHealth** — 跨域健康聚合 + 全局 DASHBOARD
+    - Layer: L4
+    - Responsibility: 自我层管理面与域统一注册
+    - Stack: Python / uv / pytest
 
----
+    ## Commands
 
-## 架构
+    ```bash
+    uv sync
+uv run pytest "tests/" -q
+uv run ruff check "src/"
+    ```
 
-```
-l4_kernel/
-├── registry.py       ← DomainRegistry (19域注册 + 路径解析)
-├── domain_types.py   ← 7种域类型 (Document/Config/Tool/...)
-├── kems.py           ← KemsPlane (六面读写) + CardsPlane
-├── health.py         ← DomainHealth (跨域聚合)
-├── schema.py         ← DomainValidator + MigrationEngine
-├── templates.py      ← 域骨架生成 + KEMS迁移
-├── signals.py        ← 跨域信号总线
-└── cli.py            ← CLI入口 (l4-kernel命令)
-```
+    ## Safe Editing Rules
 
----
+    - `域数量和域清单以 registry 与 L0/MOF 模型为准。`
+- 不要在项目说明里复制个人目录全量清单。
 
-## 快速命令
+    - Do not commit, push, reset, or bump submodule pointers unless the user explicitly asks.
+    - Preserve unrelated dirty changes in this repository.
+    - Keep Markdown pointed at SSOT files instead of copying generated facts.
 
-```bash
-cd projects/l4-kernel
-make test    # 测试
-make lint    # 检查
-make fmt     # 格式化
-make install # 安装
-```
+    ## Closeout
 
----
+    ```bash
+    git status --short
+    uv run --with "pyyaml" python "../../bin/doc-ssot-lint.py" --json
+    ```
 
-## GPTCHAS
-
-1. **零外部依赖** — 仅 pyyaml，不依赖任何 eCOS 项目
-2. **DomainRegistry 是 SSOT** — DOMAIN-INDEX.md 是唯一真源
-3. **KEMS 六面** — _control/_entities/_knowledge/_storage/_archive/_runtime
-4. **7 种域类型** — 仅 DocumentDomain 需要 KemsPlane，其他类型各有特化
+    Report the checks you actually ran and any pre-existing dirty state that remains.
