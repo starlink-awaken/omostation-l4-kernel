@@ -44,7 +44,7 @@ def find_modified_commits(days_back: int = DEFAULT_LOOKBACK_DAYS) -> list[str]:
         )
         if result.returncode != 0:
             return []
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # defensive fallback
         print(f"Error scanning commits: {e}", file=sys.stderr)
         return []
 
@@ -70,7 +70,7 @@ def check_commit_for_lint(sha: str) -> bool:
         if result.returncode == 0:
             message = result.stdout.lower()
             return any(kw in message for kw in LINT_KEYWORDS)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # defensive fallback
         print(f"Error checking commit {sha[:8]}: {e}", file=sys.stderr)
     return False
 

@@ -93,7 +93,7 @@ class ScenarioEngine:
                 step_result["status"] = "ok"
                 step_result["result"] = result
                 completed += 1
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # defensive fallback
                 step_result["status"] = "error"
                 step_result["error"] = str(e)
                 failed += 1
@@ -296,7 +296,7 @@ class ScenarioEngine:
                 result["status"] = "ok"
                 result["result"] = str(exec_result)[:200]
                 step_results.append(result)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # defensive fallback
                 result["status"] = "error"
                 result["error"] = str(e)
                 failed += 1
