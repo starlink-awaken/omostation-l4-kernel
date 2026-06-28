@@ -95,7 +95,7 @@ class DomainHealth:
                 m = re.search(r"当前状态[：:]\s*(\w+)", status_text)
                 if m:
                     health["status"] = m.group(1)
-            except Exception:  # noqa: BLE001  # defensive fallback
+            except Exception:  # defensive fallback  # noqa: BLE001
                 pass
 
         # 新鲜度
@@ -202,7 +202,7 @@ class DomainHealth:
                                     )
                             except ValueError:
                                 pass
-            except Exception:  # noqa: BLE001  # defensive fallback
+            except Exception:  # defensive fallback  # noqa: BLE001
                 pass
 
         return {

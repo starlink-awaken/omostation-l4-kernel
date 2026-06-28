@@ -217,7 +217,7 @@ class KemsValidator:
                                 "message": f"MEMORY.md: missing required frontmatter field '{field}'",
                             }
                         )
-        except Exception:  # noqa: BLE001  # defensive fallback
+        except Exception:  # defensive fallback  # noqa: BLE001
             pass
         return issues
 
@@ -241,7 +241,7 @@ class KemsValidator:
                             "message": f"STATUS.md: unknown status '{status}', must be one of {self.STATUS_VALUES}",
                         }
                     )
-        except Exception:  # noqa: BLE001  # defensive fallback
+        except Exception:  # defensive fallback  # noqa: BLE001
             pass
         return issues
 
@@ -269,7 +269,7 @@ class KemsValidator:
                                     "message": f"signals.md: unknown signal type in row: {line[:60]}",
                                 }
                             )
-        except Exception:  # noqa: BLE001  # defensive fallback
+        except Exception:  # defensive fallback  # noqa: BLE001
             pass
         return issues
 
@@ -291,7 +291,7 @@ class KemsValidator:
                             "message": f"control-rules.md: non-standard CR ID format: {crid}",
                         }
                     )
-        except Exception:  # noqa: BLE001  # defensive fallback
+        except Exception:  # defensive fallback  # noqa: BLE001
             pass
         return issues
 
@@ -312,7 +312,7 @@ class KemsValidator:
                             "message": f"{fname}: owner field is empty",
                         }
                     )
-            except Exception:  # noqa: BLE001  # defensive fallback
+            except Exception:  # defensive fallback  # noqa: BLE001
                 pass
         return issues
 

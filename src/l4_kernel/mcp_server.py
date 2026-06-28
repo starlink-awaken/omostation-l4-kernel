@@ -378,7 +378,7 @@ def l4_evolution_status() -> str:
             status["active_drifts"] = len(list(drift_dir.glob("*.json")))
 
         return json.dumps(status, ensure_ascii=False, default=str)
-    except Exception as e:  # noqa: BLE001  # defensive fallback
+    except Exception as e:  # defensive fallback  # noqa: BLE001
         return _err(f"Failed to read evolution status: {e}")
 
 
@@ -395,7 +395,7 @@ def l4_evolution_trigger(trigger_type: str = "manual") -> str:
             return _ok("Evolution trigger executed successfully. New tasks may have been planned.")
         else:
             return _err(f"Trigger failed: {proc.stderr}")
-    except Exception as e:  # noqa: BLE001  # defensive fallback
+    except Exception as e:  # defensive fallback  # noqa: BLE001
         return _err(f"Trigger error: {e}")
 
 
@@ -420,7 +420,7 @@ def l4_evolution_tasks() -> str:
                     }
                 )
         return json.dumps(tasks, ensure_ascii=False, default=str)
-    except Exception as e:  # noqa: BLE001  # defensive fallback
+    except Exception as e:  # defensive fallback  # noqa: BLE001
         return _err(f"Failed to list evolution tasks: {e}")
 
 
