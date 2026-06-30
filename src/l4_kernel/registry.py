@@ -2,11 +2,20 @@
 
 SSOT: ~/Documents/@驾驶舱/_control/DOMAIN-INDEX.md (如果不存在则使用硬编码默认值)
 与 L0 MOF M1 domain/DOMAIN-*.yaml 互补: Registry 管理文件系统路径, MOF 管理语义模型。
+
+P52 治本: Domain.path 来源 (3 层优先级)
+    1. DomainRegistry(path_overrides={...}) 显式注入 (单测/生产程序化)
+    2. 环境变量 L4_<DOMAIN_ID>_PATH (CI/容器/部署配置)
+    3. _BUILTIN_DOMAINS 默认 (Path.home() / "Documents" / "@...")
+
+设计原则: path 是运行时环境信息,不是领域语义。
+  → 领域语义 (id/name/bos_uri) 来自 L0 MOF,运行时部署路径走 env。
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import os
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
 
@@ -357,13 +366,46 @@ class DomainRegistry:
     """L4 28 域统一注册表。
 
     内置默认注册表基于 CLAUDE_COWORK_GLOBAL.md v6.0。
-    可通过 load_from_index() 从 DOMAIN-INDEX.md 加载覆盖。
+
+    P52 治本: path 解析 3 层优先级
+        1. path_overrides (显式 dict) — 最高优先级
+        2. env var L4_<DOMAIN_ID>_PATH — CI/容器配置
+        3. _BUILTIN_DOMAINS 默认 Path.home()/... — 兜底
+
+    用法:
+        reg = DomainRegistry()                                # 用默认 + env
+        reg = DomainRegistry(path_overrides={"vault": "/x"})  # 强制覆盖
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        path_overrides: dict[str, Path] | None = None,
+    ) -> None:
         self._domains: dict[str, Domain] = {}
+        # 合并: 显式 overrides > env vars > 默认
+        effective = self._load_env_overrides()
+        if path_overrides:
+            effective.update(path_overrides)
         for d in _BUILTIN_DOMAINS:
+            if d.id in effective:
+                d = replace(d, path=effective[d.id])
             self._domains[d.id] = d
+
+    @staticmethod
+    def _load_env_overrides() -> dict[str, Path]:
+        """从 L4_<DOMAIN_ID>_PATH env 读 path 覆盖。
+
+        例: export L4_VAULT_PATH=/var/lib/vault → vault 域指向该路径。
+        仅返回显式设置的 (未设 env 的域不返回,fallback 到默认)。
+        """
+        overrides: dict[str, Path] = {}
+        for d in _BUILTIN_DOMAINS:
+            env_key = f"L4_{d.id.upper().replace('-', '_')}_PATH"
+            value = os.environ.get(env_key)
+            if value:
+                overrides[d.id] = Path(value)
+        return overrides
 
     # ── 查询 ────────────────────────────────────────────────────────
 
