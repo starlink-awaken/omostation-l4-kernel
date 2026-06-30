@@ -1,6 +1,6 @@
 # L4-Kernel 能力地图
 
-> 自我层管理面 · 21域 · 43 MCP tools
+> 自我层管理面 · 域 (见 project-registry.yaml: l4-kernel.domains) · MCP tools (见 project-registry.yaml: l4-kernel)
 
 ---
 
@@ -10,7 +10,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                    L4-Kernel — 自我层管理面                    │
 ├─────────────────────────────────────────────────────────────┤
-│  21域管理  │  MCP 工具  │  KEMS 治理  │  信号总线            │
+│  域 (见 project-registry.yaml: l4-kernel.domains)管理  │  MCP 工具  │  KEMS 治理  │  信号总线            │
 │  Domain   │  43 Tools │  KEMS      │  SignalBus           │
 └─────────────────────────────────────────────────────────────┘
 ```

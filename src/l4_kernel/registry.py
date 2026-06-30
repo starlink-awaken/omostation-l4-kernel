@@ -1,4 +1,4 @@
-"""L4 Domain Registry — 25域统一注册表。
+"""L4 Domain Registry — 28域统一注册表。
 
 SSOT: ~/Documents/@驾驶舱/_control/DOMAIN-INDEX.md (如果不存在则使用硬编码默认值)
 与 L0 MOF M1 domain/DOMAIN-*.yaml 互补: Registry 管理文件系统路径, MOF 管理语义模型。
@@ -43,7 +43,7 @@ class Domain:
         }
 
 
-# ── 内置 25 域默认注册表 (SSOT 回退) ──────────────────────────────
+# ── 内置 28 域默认注册表 (SSOT 回退) ──────────────────────────────
 # ⚠️ 新增域需同时更新三处:
 #  1. 此处 _BUILTIN_DOMAINS (l4-kernel 注册表)
 #  2. DOMAIN-INDEX.md (L4 域注册表)
@@ -354,7 +354,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
 
 
 class DomainRegistry:
-    """L4 25 域统一注册表。
+    """L4 28 域统一注册表。
 
     内置默认注册表基于 CLAUDE_COWORK_GLOBAL.md v6.0。
     可通过 load_from_index() 从 DOMAIN-INDEX.md 加载覆盖。
@@ -372,7 +372,7 @@ class DomainRegistry:
         return self._domains.get(domain_id)
 
     def list_all(self) -> list[Domain]:
-        """列出所有 25 域。"""
+        """列出所有 28 域。"""
         return list(self._domains.values())
 
     def list_by_type(self, domain_type: DomainType) -> list[Domain]:

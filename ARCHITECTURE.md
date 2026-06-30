@@ -6,7 +6,7 @@
 > **Health**: See local CI and runtime probes
 > **SSOT**: 运行时健康、测试规模、域/工具计数以本项目 CI、运行时探针和 workspace governance SSOT 为准
 >
-> 系统全景参见：[`docs/ARCHITECTURE-DIAGRAM.md`](../docs/ARCHITECTURE-DIAGRAM.md)
+> 系统全景参见：[`../../docs/PANORAMA.md`](../../docs/PANORAMA.md)
 
 ---
 
@@ -35,7 +35,7 @@ graph TB
 | Type | Entry | Port / Notes |
 |:--|:--|:--|
 | CLI | `l4-kernel` | status/domain/governance/list |
-| MCP stdio | `l4-kernel mcp` | 4 tools |
+| MCP stdio | `l4-kernel mcp` | MCP tools (见 project-registry.yaml: l4-kernel) |
 | MCP HTTP | `l4-kernel mcp --http` | :7455 |
 | MCP SSE | `l4-kernel mcp --sse` |  |
 
@@ -46,7 +46,7 @@ graph TB
 | `registry.py` | DomainRegistry + DOMAIN-INDEX sync |
 | `domain_types.py` | 7 种域类型特化 (Document/Config/Tool/...) |
 | `domain_plugins.py` | 域插件注册与发现 |
-| `mcp_server.py` | MCP server (4 tools) |
+| `mcp_server.py` | MCP server (MCP tools (见 project-registry.yaml: l4-kernel)) |
 | `kems.py` | KEMS six-plane + Cards plane |
 | `health.py` | Cross-domain health aggregation |
 | `signals.py` | Cross-domain SignalBus |
