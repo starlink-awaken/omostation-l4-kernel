@@ -16,7 +16,7 @@ from l4_kernel.domain_types import (
     clear_wrap_cache,
     wrap_domain,
 )
-from l4_kernel.registry import Domain, DomainRegistry
+from l4_kernel.registry import Domain
 
 
 @pytest.fixture
@@ -188,7 +188,7 @@ class TestWorkspaceDomain:
 
 
 class TestStorageDomain:
-    def test_get_disk_usage_root(self):
+    def test_get_disk_usage_root(self, registry):
         d = wrap_domain(make_domain("storage", Path("/")))
         assert isinstance(d, StorageDomain)
         usage = d.get_disk_usage()
@@ -197,12 +197,12 @@ class TestStorageDomain:
         if usage["status"] == "mounted":
             assert "use_percent" in usage
 
-    def test_check_mount_status(self):
+    def test_check_mount_status(self, registry):
         d = wrap_domain(make_domain("storage", Path("/")))
         status = d.check_mount_status()
         assert status["mounted"] is True
 
-    def test_check_mount_status_missing(self):
+    def test_check_mount_status_missing(self, registry):
         d = wrap_domain(make_domain("storage", Path("/nonexistent_volume_xyz")))
         status = d.check_mount_status()
         assert status["mounted"] is False
@@ -233,13 +233,13 @@ class TestModelDomain:
 
 
 class TestEngineDomain:
-    def test_check_process(self):
+    def test_check_process(self, registry):
         d = wrap_domain(make_domain("engine", Path.home()))
         assert isinstance(d, EngineDomain)
         result = d.check_process("launchd")
         assert result["running"] is True
 
-    def test_check_process_nonexistent(self):
+    def test_check_process_nonexistent(self, registry):
         d = wrap_domain(make_domain("engine", Path.home()))
         result = d.check_process("nonexistent_process_xyz_12345")
         assert result["running"] is False
@@ -267,7 +267,7 @@ class TestEngineDomain:
 
 
 class TestWrapDomain:
-    def test_wrap_document(self):
+    def test_wrap_document(self, registry):
         clear_wrap_cache()
         d = Domain(id="v", name="V", domain_type="document", path=Path("/tmp"), bos_uri="bos://v/**")
         wrapped = wrap_domain(d)
@@ -277,19 +277,19 @@ class TestWrapDomain:
         wrapped2 = wrap_domain(d)
         assert wrapped is wrapped2
 
-    def test_wrap_config(self):
+    def test_wrap_config(self, registry):
         d = Domain(id="c", name="C", domain_type="config", path=Path("/tmp"), bos_uri="bos://c/**")
         wrapped = wrap_domain(d)
         assert isinstance(wrapped, ConfigDomain)
 
-    def test_wrap_tool(self):
+    def test_wrap_tool(self, registry):
         d = Domain(id="t", name="T", domain_type="tool", path=Path("/tmp"), bos_uri="bos://t/**")
         wrapped = wrap_domain(d)
         assert isinstance(wrapped, ToolDomain)
 
-    def test_wrap_all_types_from_registry(self):
+    def test_wrap_all_types_from_registry(self, registry):
         clear_wrap_cache()
-        reg = DomainRegistry()
+        reg = registry
         for domain in reg.list_all():
             wrapped = wrap_domain(domain)
             type_to_class = {

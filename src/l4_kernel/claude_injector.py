@@ -80,7 +80,7 @@ class ClaudeInjector:
     INJECTION_MARKER_COMPACT = "l4-kernel Schema"
 
     def __init__(self, registry: DomainRegistry | None = None):
-        self.registry = registry or DomainRegistry()
+        self.registry = registry or DomainRegistry.require_explicit()
 
     # ── 注入 ────────────────────────────────────────────────────────
 

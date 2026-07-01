@@ -1,11 +1,18 @@
-"""L4 Kernel CLI 入口。"""
+"""L4 Kernel CLI 入口。
+
+P52-final 真治本: DomainRegistry 必须显式 path_overrides。
+本模块提供 load_overrides_from_config() 从 TOML 配置读 path,
+作为唯一生产入口。测试入口: l4_kernel.testing.default_overrides。
+"""
 
 from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 from l4_kernel import DomainRegistry
+from l4_kernel.config_loader import load_overrides_from_config
 from l4_kernel.consistency import check_consistency
 from l4_kernel.skill_loader import (
     domain_capabilities_summary,
@@ -16,14 +23,27 @@ from l4_kernel.skill_loader import (
 )
 from l4_kernel.workflows import ScenarioEngine
 
+# 默认配置文件路径 (与 l4-kernel 同级目录)
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "l4_domain_paths.toml"
 
-def _get_engine() -> ScenarioEngine:
-    return ScenarioEngine(DomainRegistry())
+
+def _get_registry(config_path: Path | None = None) -> DomainRegistry:
+    """从 TOML 配置加载 overrides, 实例化 DomainRegistry。
+
+    P52-final: 无 fallback, 配置不存在抛 FileNotFoundError。
+    """
+    path = config_path or DEFAULT_CONFIG_PATH
+    overrides = load_overrides_from_config(path)
+    return DomainRegistry(path_overrides=overrides)
+
+
+def _get_engine(config_path: Path | None = None) -> ScenarioEngine:
+    return ScenarioEngine(_get_registry(config_path))
 
 
 def cmd_list(args: list[str]) -> int:
     """列出所有域。"""
-    registry = DomainRegistry()
+    registry = _get_registry()
     json_mode = "--json" in args
     domain_type = None
     for a in args:
@@ -54,7 +74,7 @@ def cmd_info(args: list[str]) -> int:
         print("用法: l4-kernel domain info <domain_id>", file=sys.stderr)
         return 1
 
-    registry = DomainRegistry()
+    registry = _get_registry()
     d = registry.get(args[0])
     if not d:
         print(f"域未找到: {args[0]}", file=sys.stderr)
@@ -89,7 +109,7 @@ def cmd_skills(args: list[str]) -> int:
         return 1
 
     sub = args[0]
-    registry = DomainRegistry()
+    registry = _get_registry()
 
     if sub == "list":
         if len(args) < 2:
@@ -151,7 +171,7 @@ def cmd_workflows(args: list[str]) -> int:
         return 1
 
     sub = args[0]
-    registry = DomainRegistry()
+    registry = _get_registry()
 
     if sub == "list":
         if len(args) < 2:
@@ -233,7 +253,7 @@ def cmd_consistency(args: list[str]) -> int:
 
 def cmd_health(args: list[str]) -> int:
     """全域健康检查。"""
-    registry = DomainRegistry()
+    registry = _get_registry()
     json_mode = "--json" in args
 
     health = registry.aggregate_health()

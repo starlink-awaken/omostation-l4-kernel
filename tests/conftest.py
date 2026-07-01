@@ -1,11 +1,13 @@
 """l4-kernel 测试 conftest
 
-P52 治本: 利用 DomainRegistry env var 注入,设 L4_<DOMAIN_ID>_PATH 覆盖默认 path。
-与生产部署同一机制 (CI/容器/单测都用 env),不是临时 monkeypatch。
+P52-final 真治本: 利用 l4_kernel.testing.default_overrides(tmp_path),
+传入 DomainRegistry(path_overrides=...)。与生产同款机制 (TOML 注入),
+无 env 兜底, 无 Path.home() 默认。
 """
 import pytest
 
 from l4_kernel.domain_types import clear_wrap_cache
+from l4_kernel.testing import default_overrides
 
 
 @pytest.fixture(autouse=True)
@@ -14,23 +16,44 @@ def _clear_wrap_cache():
 
 
 @pytest.fixture(autouse=True)
-def temp_domains(tmp_path, monkeypatch):
-    """通过 env var 注入 28 个域的 path 到 tmpdir。
+def l4_test_config(tmp_path, monkeypatch):
+    """P52-final: 所有测试注入 tmpdir DomainRegistry 路径。
 
-    利用 P52 治本: DomainRegistry._load_env_overrides() 会读 L4_<ID>_PATH,
-    同一机制单测/生产都可用。CI 可直接 export L4_VAULT_PATH=... 而无需代码改动。
+    1. 写 TOML config 到 tmp_path/l4_domain_paths.toml
+    2. monkeypatch setattr cli.DEFAULT_CONFIG_PATH 指向 tmpdir
+    3. reset mcp_server._globals cache (强制重 init)
     """
-    from l4_kernel import registry as _registry
+    import l4_kernel.cli as cli
+    from l4_kernel import mcp_server
 
-    for d in _registry._BUILTIN_DOMAINS:
-        # 保留原 path 后缀结构 (从 "Documents" 后开始)
-        suffix_parts = d.path.parts
-        if "Documents" in suffix_parts:
-            idx = suffix_parts.index("Documents") + 1
-            rel = "/".join(suffix_parts[idx:])
-        else:
-            rel = d.path.name
-        domain_tmp = tmp_path / rel
-        domain_tmp.mkdir(parents=True, exist_ok=True)
-        env_key = f"L4_{d.id.upper().replace('-', '_')}_PATH"
-        monkeypatch.setenv(env_key, str(domain_tmp))
+    overrides = default_overrides(tmp_path)
+    config_path = tmp_path / "l4_domain_paths.toml"
+    config_path.write_text(
+        "[domain_paths]\n"
+        + "\n".join(f'{k} = "{v}"' for k, v in overrides.items())
+        + "\n"
+    )
+
+    monkeypatch.setattr(cli, "DEFAULT_CONFIG_PATH", config_path)
+    monkeypatch.setattr(mcp_server, "_globals", None)
+
+    yield overrides
+
+    monkeypatch.setattr(mcp_server, "_globals", None)
+
+
+@pytest.fixture
+def registry(tmp_path, l4_test_config):
+    """P52-final: 工厂 fixture, 给所有测试统一 DomainRegistry 实例。
+
+    替代测试里直接 `DomainRegistry()` 无参调用 (现已禁用)。
+    """
+    from l4_kernel import DomainRegistry
+    return DomainRegistry(path_overrides=default_overrides(tmp_path))
+
+
+# 兼容旧 conftest
+@pytest.fixture(autouse=True)
+def temp_domains(monkeypatch):
+    """P52-final 已废弃, 由 l4_test_config + registry 替代。保留 stub 避免老测试 break。"""
+    yield

@@ -89,7 +89,7 @@ def check_consistency() -> dict[str, Any]:
     Returns:
         {"status": "ok"|"diff", "total": N, "diff_count": N, "differences": [...]}
     """
-    registry = DomainRegistry()
+    registry = DomainRegistry.require_explicit()
     registry_domains = registry.list_all()
     vault_paths = load_vault_paths()
     index_domains = load_domain_index()

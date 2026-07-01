@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from l4_kernel.claude_injector import ClaudeInjector, check_injection_status
-from l4_kernel.registry import Domain, DomainRegistry
+from l4_kernel.registry import Domain
 from l4_kernel.templates import init_domain_kems
 
 
@@ -42,8 +42,8 @@ def temp_domain_with_claude():
 
 
 @pytest.fixture
-def registry_with_temp_domain(temp_domain_with_claude):
-    reg = DomainRegistry()
+def registry_with_temp_domain(temp_domain_with_claude, registry):
+    reg = registry
     reg.register(
         Domain(
             id="inject-test",
@@ -85,8 +85,8 @@ class TestClaudeInjector:
         assert "## §2 对外接口" in content
         assert "会话入口协议" in content
 
-    def test_inject_nonexistent(self):
-        injector = ClaudeInjector()
+    def test_inject_nonexistent(self, registry):
+        injector = ClaudeInjector(registry)
         result = injector.inject("nonexistent")
         assert result["status"] == "error"
         assert result["injected"] is False
@@ -111,8 +111,8 @@ class TestClaudeInjector:
         assert result["has_schema"] is True
         assert result["needs_injection"] is False
 
-    def test_diff_nonexistent(self):
-        injector = ClaudeInjector()
+    def test_diff_nonexistent(self, registry):
+        injector = ClaudeInjector(registry)
         result = injector.diff("nonexistent")
         assert result["status"] == "not_found"
 
@@ -121,8 +121,8 @@ class TestClaudeInjector:
         result = injector.validate("inject-test")
         assert result["has_schema"] is False
 
-    def test_validate_all(self):
-        injector = ClaudeInjector()
+    def test_validate_all(self, registry):
+        injector = ClaudeInjector(registry)
         result = injector.validate_all()
         assert "total" in result
         assert "injected" in result
@@ -143,14 +143,14 @@ class TestClaudeInjector:
         result = injector.remove("inject-test")
         assert result["status"] == "not_injected"
 
-    def test_inject_all(self):
-        injector = ClaudeInjector()
+    def test_inject_all(self, registry):
+        injector = ClaudeInjector(registry)
         results = injector.inject_all(compact=True)
         assert isinstance(results, dict)
         # 至少有一个存在的域
         assert len(results) >= 1
 
-    def test_convenience_functions(self):
-        status = check_injection_status()
+    def test_convenience_functions(self, registry):
+        status = check_injection_status(registry)
         assert "total" in status
         assert "injected" in status

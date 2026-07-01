@@ -14,7 +14,6 @@ P52 治本: Domain.path 来源 (3 层优先级)
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
@@ -367,45 +366,52 @@ class DomainRegistry:
 
     内置默认注册表基于 CLAUDE_COWORK_GLOBAL.md v6.0。
 
-    P52 治本: path 解析 3 层优先级
-        1. path_overrides (显式 dict) — 最高优先级
-        2. env var L4_<DOMAIN_ID>_PATH — CI/容器配置
-        3. _BUILTIN_DOMAINS 默认 Path.home()/... — 兜底
+    P52-final 真治本: path 解析
+        - 必须显式提供 path_overrides, 缺失抛 ValueError (无默认, 无 env 兜底)
+        - 错误前提 Path.home() / "Documents" / "@..." 完全删除
+        - 生产入口: l4_kernel.cli.load_overrides_from_config()
+        - 测试入口: l4_kernel.testing.default_overrides(tmp_path)
 
-    用法:
-        reg = DomainRegistry()                                # 用默认 + env
-        reg = DomainRegistry(path_overrides={"vault": "/x"})  # 强制覆盖
+    P52 渐进 (已废弃, 保留 import 兼容):
+        - 之前支持 env L4_<ID>_PATH, 已被显式 overrides 取代
+        - 之前有 _BUILTIN_DOMAINS 默认, 已被删除 (本类无内部默认)
     """
 
     def __init__(
         self,
         *,
-        path_overrides: dict[str, Path] | None = None,
+        path_overrides: dict[str, Path],
     ) -> None:
+        if not path_overrides:
+            raise ValueError(
+                "DomainRegistry requires explicit path_overrides. "
+                "Use l4_kernel.cli.load_overrides_from_config() for production, "
+                "or l4_kernel.testing.default_overrides(tmp_path) for tests. "
+                "P52-final: removed Path.home() default + env fallback."
+            )
         self._domains: dict[str, Domain] = {}
-        # 合并: 显式 overrides > env vars > 默认
-        effective = self._load_env_overrides()
-        if path_overrides:
-            effective.update(path_overrides)
+        builtin_ids = {d.id for d in _BUILTIN_DOMAINS}
         for d in _BUILTIN_DOMAINS:
-            if d.id in effective:
-                d = replace(d, path=effective[d.id])
+            if d.id not in path_overrides:
+                raise ValueError(
+                    f"Domain {d.id!r} missing from path_overrides. "
+                    f"Required keys: {sorted(builtin_ids)}"
+                )
+            d = replace(d, path=path_overrides[d.id])
             self._domains[d.id] = d
 
     @staticmethod
-    def _load_env_overrides() -> dict[str, Path]:
-        """从 L4_<DOMAIN_ID>_PATH env 读 path 覆盖。
+    def require_explicit() -> DomainRegistry:
+        """失败助手: 用于 class 构造中的 `or DomainRegistry()` 模式。
 
-        例: export L4_VAULT_PATH=/var/lib/vault → vault 域指向该路径。
-        仅返回显式设置的 (未设 env 的域不返回,fallback 到默认)。
+        P52-final: 没有默认值, 此函数总是抛 RuntimeError, 强制调用方传 registry。
         """
-        overrides: dict[str, Path] = {}
-        for d in _BUILTIN_DOMAINS:
-            env_key = f"L4_{d.id.upper().replace('-', '_')}_PATH"
-            value = os.environ.get(env_key)
-            if value:
-                overrides[d.id] = Path(value)
-        return overrides
+        raise RuntimeError(
+            "DomainRegistry requires explicit path_overrides. "
+            "P52-final: removed implicit Path.home() default + env fallback. "
+            "Pass DomainRegistry(path_overrides=...) explicitly, or use "
+            "l4_kernel.testing.default_overrides(tmp_path) for tests."
+        )
 
     # ── 查询 ────────────────────────────────────────────────────────
 

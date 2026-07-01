@@ -23,7 +23,7 @@ class DomainHealth:
     """
 
     def __init__(self, registry: DomainRegistry | None = None):
-        self.registry = registry or DomainRegistry()
+        self.registry = registry or DomainRegistry.require_explicit()
 
     # ── 聚合健康 ────────────────────────────────────────────────────
 
@@ -95,7 +95,7 @@ class DomainHealth:
                 m = re.search(r"当前状态[：:]\s*(\w+)", status_text)
                 if m:
                     health["status"] = m.group(1)
-            except Exception:  # defensive fallback  # noqa: BLE001
+            except Exception:  # defensive fallback
                 pass
 
         # 新鲜度
@@ -202,7 +202,7 @@ class DomainHealth:
                                     )
                             except ValueError:
                                 pass
-            except Exception:  # defensive fallback  # noqa: BLE001
+            except Exception:  # defensive fallback
                 pass
 
         return {

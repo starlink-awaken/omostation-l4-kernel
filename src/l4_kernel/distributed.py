@@ -22,7 +22,7 @@ class DistributedScenarioEngine:
 
     def __init__(self, hub: FederationHub, registry: DomainRegistry | None = None):
         self.hub = hub
-        self.registry = registry or DomainRegistry()
+        self.registry = registry or DomainRegistry.require_explicit()
         self.health = DomainHealth(self.registry)
         self.signals = SignalBus(self.registry)
 

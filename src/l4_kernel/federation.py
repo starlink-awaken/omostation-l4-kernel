@@ -86,7 +86,7 @@ class FederationHub:
 
     def __init__(self, node_id: str, registry: DomainRegistry | None = None, config_path: Path | None = None):
         self.node_id = node_id
-        self.registry = registry or DomainRegistry()
+        self.registry = registry or DomainRegistry.require_explicit()
         self.config_path = config_path or Path.home() / ".config" / "l4-kernel" / "federation.json"
         self.peers: dict[str, PeerNode] = {}
         self.federated_domains: dict[str, FederatedDomain] = {}

@@ -5,59 +5,59 @@ from l4_kernel.registry import DomainRegistry
 
 
 class TestDomainHealth:
-    def test_aggregate_health(self):
-        health = DomainHealth()
+    def test_aggregate_health(self, registry):
+        health = DomainHealth(registry)
         result = health.aggregate_health()
         assert result["total"] == 28
         assert "document_domains" in result
         assert "by_type" in result
         assert result["health_rate"].endswith("%")
 
-    def test_document_domains_included(self):
-        health = DomainHealth()
+    def test_document_domains_included(self, registry):
+        health = DomainHealth(registry)
         result = health.aggregate_health()
         assert "vault" in result["document_domains"]
         assert "personal" in result["document_domains"]
         assert "cockpit" in result["document_domains"]
 
-    def test_check_freshness_vault(self):
-        health = DomainHealth()
+    def test_check_freshness_vault(self, registry):
+        health = DomainHealth(registry)
         result = health.check_freshness("vault")
         assert result["domain_id"] == "vault"
         assert "fresh" in result
         assert "issues" in result
 
-    def test_check_freshness_nonexistent(self):
-        health = DomainHealth()
+    def test_check_freshness_nonexistent(self, registry):
+        health = DomainHealth(registry)
         result = health.check_freshness("nonexistent")
         assert result["status"] == "not_found"
 
-    def test_check_all_freshness(self):
-        health = DomainHealth()
+    def test_check_all_freshness(self, registry):
+        health = DomainHealth(registry)
         result = health.check_all_freshness()
         assert "vault" in result
         assert "cockpit" in result
         assert "personal" in result
 
-    def test_cross_domain_search(self):
-        health = DomainHealth()
+    def test_cross_domain_search(self, registry):
+        health = DomainHealth(registry)
         results = health.cross_domain_search("测试", max_per_domain=2)
         assert isinstance(results, list)
 
-    def test_generate_dashboard(self):
-        health = DomainHealth()
+    def test_generate_dashboard(self, registry):
+        health = DomainHealth(registry)
         dashboard = health.generate_dashboard()
         assert "# L4 全域健康 DASHBOARD" in dashboard
         assert "总览" in dashboard
         assert "按类型" in dashboard
         assert "DocumentDomain 详情" in dashboard
 
-    def test_get_violations(self):
-        health = DomainHealth()
+    def test_get_violations(self, registry):
+        health = DomainHealth(registry)
         violations = health.get_violations()
         assert isinstance(violations, dict)
         # 存在的域至少有一个被检查
-        reg = DomainRegistry()
+        reg = registry
         existing_docs = [d.id for d in reg.list_document_domains() if d.exists()]
         checked = [did for did in existing_docs if did in violations]
         assert len(checked) >= 1
@@ -66,8 +66,8 @@ class TestDomainHealth:
 class TestFreshnessWithRealDomain:
     """测试新鲜度检查在真实域上的行为。"""
 
-    def test_vault_freshness_has_expected_fields(self):
-        health = DomainHealth()
+    def test_vault_freshness_has_expected_fields(self, registry):
+        health = DomainHealth(registry)
         result = health.check_freshness("vault")
         assert "domain_id" in result
         assert "fresh" in result
@@ -83,15 +83,15 @@ class TestFreshnessWithRealDomain:
 class TestCalcFreshness:
     """测试新鲜度计算。"""
 
-    def test_calc_freshness_vault(self):
-        reg = DomainRegistry()
+    def test_calc_freshness_vault(self, registry):
+        reg = registry
         health = DomainHealth(reg)
         d = reg.get("vault")
         score = health._calc_freshness(d)
         assert 0.0 <= score <= 1.0
 
-    def test_calc_freshness_missing_domain(self):
-        reg = DomainRegistry()
+    def test_calc_freshness_missing_domain(self, registry):
+        reg = registry
         health = DomainHealth(reg)
         d = reg.get("shareddisk")
         score = health._calc_freshness(d)
@@ -105,10 +105,9 @@ class TestCmdHealthExitCode:
     修改此行为会破坏 X-Plane l4-kernel-mcp-sse 探针。
     """
 
-    def test_cmd_health_returns_zero_when_all_present(self):
+    def test_cmd_health_returns_zero_when_all_present(self, registry):
         """注入 mock registry 触发 all-present 场景。"""
         from l4_kernel.cli import cmd_health
-        from l4_kernel.registry import DomainRegistry
 
         orig = DomainRegistry.aggregate_health
         DomainRegistry.aggregate_health = lambda self: {
@@ -124,10 +123,9 @@ class TestCmdHealthExitCode:
         finally:
             DomainRegistry.aggregate_health = orig
 
-    def test_cmd_health_returns_one_when_missing(self):
+    def test_cmd_health_returns_one_when_missing(self, registry):
         """注入 mock registry 触发 missing,验证 exit code 真的依赖 missing 计数。"""
         from l4_kernel.cli import cmd_health
-        from l4_kernel.registry import DomainRegistry
 
         orig = DomainRegistry.aggregate_health
         DomainRegistry.aggregate_health = lambda self: {
@@ -143,7 +141,7 @@ class TestCmdHealthExitCode:
         finally:
             DomainRegistry.aggregate_health = orig
 
-    def test_cmd_health_real_current_state(self):
+    def test_cmd_health_real_current_state(self, registry):
         """记录当下 vault 真实健康度(写测试时的 snapshot)。
 
         本会话开始时: 21 域中 18 存在(3 missing: workspace/storage/model 缺)。

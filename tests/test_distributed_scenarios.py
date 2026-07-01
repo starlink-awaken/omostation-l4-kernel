@@ -10,14 +10,14 @@ from l4_kernel.federation import FederationHub, PeerNode
 
 
 @pytest.fixture
-def hub():
+def hub(registry):
     config = Path(tempfile.mkdtemp()) / "federation.json"
-    return FederationHub(node_id="node-primary", config_path=config)
+    return FederationHub(node_id="node-primary", registry=registry, config_path=config)
 
 
 @pytest.fixture
-def engine(hub):
-    return DistributedScenarioEngine(hub)
+def engine(hub, registry):
+    return DistributedScenarioEngine(hub, registry=registry)
 
 
 class TestDomainSync:

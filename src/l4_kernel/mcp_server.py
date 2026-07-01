@@ -15,7 +15,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from l4_kernel import DomainRegistry
 from l4_kernel.claude_injector import ClaudeInjector
@@ -33,25 +33,68 @@ from l4_kernel.skill_loader import (
 )
 from l4_kernel.templates import KemsValidator
 
-# ── 全局实例 ──────────────────────────────────────────────────────
+# Type hints (静态分析, 不触发 lazy init)
+if TYPE_CHECKING:
+    _registry: DomainRegistry
+    _health: DomainHealth
+    _signals: SignalBus
+    _lifecycle: DomainLifecycle
+    _injector: ClaudeInjector
+    _plugins: Any
 
-_registry = DomainRegistry()
-_health = DomainHealth(_registry)
-_signals = SignalBus(_registry)
-_lifecycle = DomainLifecycle(_registry)
-_injector = ClaudeInjector(_registry)
-_plugins = get_plugin_registry()
+# ── 全局实例 (P52-final: lazy init) ─────────────────────────────────
+
+_globals: dict | None = None
+
+
+def _get_globals() -> dict:
+    """Lazy 初始化 MCP server 全局实例。
+
+    P52-final 真治本: module-level 不创建 globals (避免 import 时崩溃,
+    因为 DomainRegistry 需要 path_overrides)。首次访问时创建。
+
+    返回 dict 含 registry/health/signals/lifecycle/injector/plugins。
+    """
+    global _globals
+    if _globals is None:
+        from l4_kernel.cli import DEFAULT_CONFIG_PATH
+        from l4_kernel.config_loader import load_overrides_from_config
+
+        registry = DomainRegistry(
+            path_overrides=load_overrides_from_config(DEFAULT_CONFIG_PATH)
+        )
+        _globals = {
+            "registry": registry,
+            "health": DomainHealth(registry),
+            "signals": SignalBus(registry),
+            "lifecycle": DomainLifecycle(registry),
+            "injector": ClaudeInjector(registry),
+            "plugins": get_plugin_registry(),
+        }
+    return _globals
+
+
+# 兼容旧代码: PEP 562 module-level __getattr__ 兼容
+def __getattr__(name: str) -> Any:
+    """Lazy 代理: 让 _registry 等访问触发 _get_globals()。
+
+    P52-final: 允许旧 _registry = DomainRegistry() 调用方式继续工作,
+    但内部 lazy 创建, 避免 module load 时的硬性依赖。
+    """
+    if name in ("_registry", "_health", "_signals", "_lifecycle", "_injector", "_plugins"):
+        return _get_globals()[name[1:]]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _reload_globals() -> dict:
-    """重载所有全局实例 (用于运行时配置更新)。"""
-    global _registry, _health, _signals, _lifecycle, _injector
-    _registry = DomainRegistry()
-    _health = DomainHealth(_registry)
-    _signals = SignalBus(_registry)
-    _lifecycle = DomainLifecycle(_registry)
-    _injector = ClaudeInjector(_registry)
-    return {"status": "ok", "message": "Global instances reloaded", "domains": len(_registry.list_all())}
+    """重载所有全局实例 (用于运行时配置更新)。
+
+    P52-final: 通过 _get_globals() 重新创建, 不需要 DomainRegistry 实例。
+    """
+    global _globals
+    _globals = None
+    g = _get_globals()
+    return {"status": "ok", "message": "Global instances reloaded", "domains": len(g["registry"].list_all())}
 
 
 def _ok(data: Any = None) -> str:
@@ -72,15 +115,15 @@ def _err(msg: str) -> str:
 def l4_domains_list(domain_type: str = "") -> str:
     """列出所有域或按类型筛选。"""
     if domain_type:
-        domains = _registry.list_by_type(domain_type)
+        domains = _get_globals()["registry"].list_by_type(domain_type)
     else:
-        domains = _registry.list_all()
+        domains = _get_globals()["registry"].list_all()
     return json.dumps([d.to_dict() for d in domains], ensure_ascii=False, default=str)
 
 
 def l4_domain_info(domain_id: str) -> str:
     """获取域详情。"""
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
     return json.dumps(d.to_dict(), ensure_ascii=False, default=str)
@@ -96,7 +139,7 @@ def l4_domain_create(
     dry_run: bool = False,
 ) -> str:
     """创建新域。"""
-    result = _lifecycle.create(
+    result = _get_globals()["lifecycle"].create(
         domain_id,
         name,
         domain_type,
@@ -111,28 +154,28 @@ def l4_domain_create(
 def l4_domain_validate(domain_id: str = "") -> str:
     """校验域完整性 (不指定=全部)。"""
     if domain_id:
-        result = _lifecycle.validate(domain_id)
+        result = _get_globals()["lifecycle"].validate(domain_id)
     else:
-        result = _lifecycle.validate_all()
+        result = _get_globals()["lifecycle"].validate_all()
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
 def l4_domain_freeze(domain_id: str, reason: str = "") -> str:
     """冻结域。"""
-    return json.dumps(_lifecycle.freeze(domain_id, reason), ensure_ascii=False, default=str)
+    return json.dumps(_get_globals()["lifecycle"].freeze(domain_id, reason), ensure_ascii=False, default=str)
 
 
 def l4_domain_unfreeze(domain_id: str) -> str:
     """解冻域。"""
-    return json.dumps(_lifecycle.unfreeze(domain_id), ensure_ascii=False, default=str)
+    return json.dumps(_get_globals()["lifecycle"].unfreeze(domain_id), ensure_ascii=False, default=str)
 
 
 def l4_domain_migrate(domain_id: str = "", to_version: str = "v5") -> str:
     """迁移 KEMS 版本 (不指定=所有 DocumentDomain)。"""
     if domain_id:
-        result = _lifecycle.migrate(domain_id, to_version)
+        result = _get_globals()["lifecycle"].migrate(domain_id, to_version)
     else:
-        result = _lifecycle.migrate_all_document_domains(to_version)
+        result = _get_globals()["lifecycle"].migrate_all_document_domains(to_version)
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
@@ -142,7 +185,7 @@ def l4_domain_migrate(domain_id: str = "", to_version: str = "v5") -> str:
 
 
 def _get_kems(domain_id: str):
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return None
     return KemsPlane(d.path)
@@ -208,7 +251,7 @@ def l4_entrypoint_read(domain_id: str) -> str:
 
 def l4_signal_emit(domain_id: str, signal_type: str, message: str, cross_domain: bool = False) -> str:
     """发射信号。signal_type: ✅⚠️🔴ℹ️"""
-    ok = _signals.emit(domain_id, signal_type, message, cross_domain=cross_domain)
+    ok = _get_globals()["signals"].emit(domain_id, signal_type, message, cross_domain=cross_domain)
     return _ok() if ok else _err("Failed to emit signal")
 
 
@@ -228,13 +271,13 @@ def l4_search(domain_id: str, keyword: str, max_results: int = 10) -> str:
 
 def l4_cross_search(keyword: str, max_per_domain: int = 5) -> str:
     """跨所有 DocumentDomain 全文搜索。"""
-    results = _health.cross_domain_search(keyword, max_per_domain=max_per_domain)
+    results = _get_globals()["health"].cross_domain_search(keyword, max_per_domain=max_per_domain)
     return json.dumps(results, ensure_ascii=False, default=str)
 
 
 def l4_kems_validate(domain_id: str) -> str:
     """KEMS 结构校验。"""
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
     validator = KemsValidator(d.path)
@@ -244,9 +287,9 @@ def l4_kems_validate(domain_id: str) -> str:
 def l4_freshness(domain_id: str = "") -> str:
     """新鲜度检查 (不指定=所有)。"""
     if domain_id:
-        result = _health.check_freshness(domain_id)
+        result = _get_globals()["health"].check_freshness(domain_id)
     else:
-        result = _health.check_all_freshness()
+        result = _get_globals()["health"].check_all_freshness()
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
@@ -268,7 +311,7 @@ def l4_files_list(domain_id: str, plane: str = "_control", pattern: str = "") ->
 
 
 def _get_cards():
-    cockpit = _registry.get("cockpit")
+    cockpit = _get_globals()["registry"].get("cockpit")
     if not cockpit or not cockpit.exists():
         return None
     return CardsPlane(cockpit.path)
@@ -332,27 +375,27 @@ def l4_cards_compliance(card_id: str) -> str:
 
 def l4_health(domain_id: str = "") -> str:
     """全域/单域健康报告。"""
-    result = _lifecycle.health_report(domain_id)
+    result = _get_globals()["lifecycle"].health_report(domain_id)
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
 def l4_dashboard() -> str:
     """生成全域 DASHBOARD。"""
-    return json.dumps({"dashboard": _health.generate_dashboard()}, ensure_ascii=False, default=str)
+    return json.dumps({"dashboard": _get_globals()["health"].generate_dashboard()}, ensure_ascii=False, default=str)
 
 
 def l4_signal_patterns(window_hours: int = 72) -> str:
     """检测跨域信号模式。"""
-    patterns = _signals.detect_patterns(window_hours)
+    patterns = _get_globals()["signals"].detect_patterns(window_hours)
     return json.dumps(patterns, ensure_ascii=False, default=str)
 
 
 def l4_claude_validate(domain_id: str = "") -> str:
     """CLAUDE.md Schema 注入状态。"""
     if domain_id:
-        result = _injector.validate(domain_id)
+        result = _get_globals()["injector"].validate(domain_id)
     else:
-        result = _injector.validate_all()
+        result = _get_globals()["injector"].validate_all()
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
@@ -378,7 +421,7 @@ def l4_evolution_status() -> str:
             status["active_drifts"] = len(list(drift_dir.glob("*.json")))
 
         return json.dumps(status, ensure_ascii=False, default=str)
-    except Exception as e:  # defensive fallback  # noqa: BLE001
+    except Exception as e:  # defensive fallback
         return _err(f"Failed to read evolution status: {e}")
 
 
@@ -395,7 +438,7 @@ def l4_evolution_trigger(trigger_type: str = "manual") -> str:
             return _ok("Evolution trigger executed successfully. New tasks may have been planned.")
         else:
             return _err(f"Trigger failed: {proc.stderr}")
-    except Exception as e:  # defensive fallback  # noqa: BLE001
+    except Exception as e:  # defensive fallback
         return _err(f"Trigger error: {e}")
 
 
@@ -420,7 +463,7 @@ def l4_evolution_tasks() -> str:
                     }
                 )
         return json.dumps(tasks, ensure_ascii=False, default=str)
-    except Exception as e:  # defensive fallback  # noqa: BLE001
+    except Exception as e:  # defensive fallback
         return _err(f"Failed to list evolution tasks: {e}")
 
 
@@ -431,28 +474,28 @@ def l4_evolution_tasks() -> str:
 
 def l4_plugin_actions(domain_type: str) -> str:
     """列出域类型的可用插件动作。"""
-    actions = _plugins.list_actions(domain_type)
+    actions = _get_globals()["plugins"].list_actions(domain_type)
     return json.dumps(actions, ensure_ascii=False, default=str)
 
 
 def l4_plugin_workflows(domain_type: str) -> str:
     """列出域类型的可用工作流。"""
-    workflows = _plugins.list_workflows(domain_type)
+    workflows = _get_globals()["plugins"].list_workflows(domain_type)
     return json.dumps(workflows, ensure_ascii=False, default=str)
 
 
 def l4_plugin_specs(domain_type: str) -> str:
     """获取域类型的规范。"""
-    specs = _plugins.get_specifications(domain_type)
+    specs = _get_globals()["plugins"].get_specifications(domain_type)
     return json.dumps(specs, ensure_ascii=False, default=str)
 
 
 def l4_plugin_run_action(domain_type: str, action_name: str, domain_id: str) -> str:
     """执行插件动作。"""
-    action = _plugins.get_action(domain_type, action_name)
+    action = _get_globals()["plugins"].get_action(domain_type, action_name)
     if not action:
         return _err(f"Action '{action_name}' not found for type '{domain_type}'")
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
     result = action(d.path)
@@ -461,10 +504,10 @@ def l4_plugin_run_action(domain_type: str, action_name: str, domain_id: str) -> 
 
 def l4_plugin_run_mechanism(domain_type: str, mechanism_name: str, domain_id: str) -> str:
     """执行插件机制。"""
-    mechanism = _plugins.get_mechanism(domain_type, mechanism_name)
+    mechanism = _get_globals()["plugins"].get_mechanism(domain_type, mechanism_name)
     if not mechanism:
         return _err(f"Mechanism '{mechanism_name}' not found for type '{domain_type}'")
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
     result = mechanism(d.path)
@@ -476,7 +519,7 @@ def l4_plugin_run_mechanism(domain_type: str, mechanism_name: str, domain_id: st
 
 def l4_file_write(domain_id: str, path: str, content: str) -> str:
     """写入文件到域内路径。如果文件存在则覆盖，目录不存在自动创建。"""
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
     fp = d.path / path
@@ -490,7 +533,7 @@ def l4_file_write(domain_id: str, path: str, content: str) -> str:
 
 def l4_file_append(domain_id: str, path: str, content: str) -> str:
     """追加内容到文件末尾。"""
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
     fp = d.path / path
@@ -505,7 +548,7 @@ def l4_file_append(domain_id: str, path: str, content: str) -> str:
 
 def l4_file_read(domain_id: str, path: str) -> str:
     """读取域内文件内容。"""
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
     fp = d.path / path
@@ -519,7 +562,7 @@ def l4_file_read(domain_id: str, path: str) -> str:
 
 def l4_entry_create(domain_id: str, parent_dir: str, name: str, content: str) -> str:
     """在域内目录下创建新条目（灵感/项目/日志等）。自动生成日期前缀。"""
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
     from datetime import date
@@ -540,7 +583,7 @@ def l4_entry_create(domain_id: str, parent_dir: str, name: str, content: str) ->
 
 def l4_skill_list(domain_id: str) -> str:
     """列出域的 skills。"""
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
     caps = domain_capabilities_summary(d.path)
@@ -549,7 +592,7 @@ def l4_skill_list(domain_id: str) -> str:
 
 def l4_skill_show(domain_id: str, skill_id: str) -> str:
     """查看 skill 定义。"""
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
     skill = find_skill(domain_skills_dir(d.path), skill_id)
@@ -560,7 +603,7 @@ def l4_skill_show(domain_id: str, skill_id: str) -> str:
 
 def l4_workflow_list(domain_id: str) -> str:
     """列出域的工作流。"""
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
     caps = domain_capabilities_summary(d.path)
@@ -569,7 +612,7 @@ def l4_workflow_list(domain_id: str) -> str:
 
 def l4_workflow_show(domain_id: str, workflow_id: str) -> str:
     """查看工作流定义。"""
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
     wf = find_workflow(domain_workflows_dir(d.path), workflow_id)
@@ -582,18 +625,21 @@ def l4_workflow_show(domain_id: str, workflow_id: str) -> str:
 
 from l4_kernel.workflows import ScenarioEngine
 
-_engine = ScenarioEngine(_registry)
+
+def _get_engine() -> ScenarioEngine:
+    """Lazy 初始化 ScenarioEngine, 复用 _get_globals() 的 registry。"""
+    return ScenarioEngine(_get_globals()["registry"])
 
 
 def l4_skill_run(domain_id: str, skill_id: str, **params: str) -> str:
     """执行一个 skill。params 传入模板变量如 project_name='星尘'。"""
-    result = _engine.run_skill(domain_id, skill_id, **params)
+    result = _get_engine().run_skill(domain_id, skill_id, **params)
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
 def l4_workflow_run(domain_id: str, workflow_id: str, **params: str) -> str:
     """执行一个 workflow（按 skills 顺序编排）。"""
-    result = _engine.run_workflow(domain_id, workflow_id, **params)
+    result = _get_engine().run_workflow(domain_id, workflow_id, **params)
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
@@ -614,7 +660,7 @@ def l4_check_consistency() -> str:
     """列出配置域文件。"""
     from l4_kernel.domain_types import wrap_domain
 
-    d = _registry.get(domain_id)  # noqa: F821
+    d = _get_globals()["registry"].get(domain_id)  # noqa: F821
     if not d:
         return _err(f"Domain '{domain_id}' not found")  # noqa: F821
     w = wrap_domain(d)
@@ -627,7 +673,7 @@ def l4_config_read(domain_id: str, path: str) -> str:
     """读取配置文件。"""
     from l4_kernel.domain_types import wrap_domain
 
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
@@ -641,7 +687,7 @@ def l4_tools_list(domain_id: str) -> str:
     """列出工具域脚本。"""
     from l4_kernel.domain_types import wrap_domain
 
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
@@ -654,7 +700,7 @@ def l4_storage_usage(domain_id: str) -> str:
     """磁盘使用情况。"""
     from l4_kernel.domain_types import wrap_domain
 
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
@@ -667,7 +713,7 @@ def l4_models_list(domain_id: str) -> str:
     """列出模型文件。"""
     from l4_kernel.domain_types import wrap_domain
 
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
@@ -680,7 +726,7 @@ def l4_engine_check(domain_id: str, process_name: str = "") -> str:
     """检查引擎进程。"""
     from l4_kernel.domain_types import wrap_domain
 
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
@@ -693,7 +739,7 @@ def l4_engine_logs(domain_id: str, log_file: str = "daemon.log", lines: int = 20
     """读取引擎日志。"""
     from l4_kernel.domain_types import wrap_domain
 
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
@@ -706,7 +752,7 @@ def l4_workspace_search(domain_id: str, pattern: str) -> str:
     """工作空间文件搜索。"""
     from l4_kernel.domain_types import wrap_domain
 
-    d = _registry.get(domain_id)
+    d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)

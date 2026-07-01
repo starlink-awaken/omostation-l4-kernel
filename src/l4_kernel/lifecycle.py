@@ -46,7 +46,7 @@ class DomainLifecycle:
     """
 
     def __init__(self, registry: DomainRegistry | None = None):
-        self.registry = registry or DomainRegistry()
+        self.registry = registry or DomainRegistry.require_explicit()
         self.signals = SignalBus(self.registry)
 
     # ── 创建域 ──────────────────────────────────────────────────────
@@ -379,7 +379,7 @@ class DomainLifecycle:
             mgr = LifecycleManager()
             summary = mgr.get_stage_summary(domain_id)
             return summary
-        except Exception:  # defensive fallback  # noqa: BLE001
+        except Exception:  # defensive fallback
             return None
 
     def _get_md_dashboard(self) -> dict | None:
@@ -395,7 +395,7 @@ class DomainLifecycle:
                 "blockers": dashboard.blockers,
                 "avg_progress": dashboard.avg_progress,
             }
-        except Exception:  # defensive fallback  # noqa: BLE001
+        except Exception:  # defensive fallback
             return None
 
     def track_domain_lifecycle(self, domain_id: str, entity_type: str = "domain") -> dict:
@@ -407,7 +407,7 @@ class DomainLifecycle:
             mgr = LifecycleManager()
             mgr.create_tracker(domain_id, entity_type)
             return {"status": "ok", "message": f"已为 {domain_id} 创建生命周期追踪"}
-        except Exception as e:  # defensive fallback  # noqa: BLE001
+        except Exception as e:  # defensive fallback
             return {"status": "error", "message": str(e)}
 
     def advance_domain_stage(self, domain_id: str, target_stage: str) -> dict:
@@ -432,7 +432,7 @@ class DomainLifecycle:
                 "message": msg,
                 "current_stage": tracker.current_stage.value if tracker.current_stage else None,
             }
-        except Exception as e:  # defensive fallback  # noqa: BLE001
+        except Exception as e:  # defensive fallback
             return {"status": "error", "message": str(e)}
 
     def create_domain_pipeline(self, domain_id: str) -> dict:
@@ -448,7 +448,7 @@ class DomainLifecycle:
                 "message": f"已为 {domain_id} 创建三阶段流水线 (当前: ColdStart)",
                 "pipeline": pt.get_progress(),
             }
-        except Exception as e:  # defensive fallback  # noqa: BLE001
+        except Exception as e:  # defensive fallback
             return {"status": "error", "message": str(e)}
 
     def _run_derivation_for_domain(self, domain_id: str) -> dict | None:
@@ -475,14 +475,14 @@ class DomainLifecycle:
                             data = yaml.safe_load(open(f))
                             if data and "type" in data:
                                 nodes.append(data)
-                        except Exception:  # defensive fallback  # noqa: BLE001
+                        except Exception:  # defensive fallback
                             pass
 
             engine = DerivationEngine()
             engine.execute_all(nodes)
             summary = engine.get_summary()
             return summary
-        except Exception:  # defensive fallback  # noqa: BLE001
+        except Exception:  # defensive fallback
             return None
 
     def _run_derivation_all(self) -> dict | None:
@@ -503,13 +503,13 @@ class DomainLifecycle:
                             data = yaml.safe_load(open(f))
                             if data and "type" in data:
                                 nodes.append(data)
-                        except Exception:  # defensive fallback  # noqa: BLE001
+                        except Exception:  # defensive fallback
                             pass
 
             engine = DerivationEngine()
             engine.execute_all(nodes)
             return engine.get_summary()
-        except Exception:  # defensive fallback  # noqa: BLE001
+        except Exception:  # defensive fallback
             return None
 
     def _get_md_pipeline_summary(self) -> dict | None:
@@ -531,7 +531,7 @@ class DomainLifecycle:
                 },
                 "pipelines": pipelines,
             }
-        except Exception:  # defensive fallback  # noqa: BLE001
+        except Exception:  # defensive fallback
             return None
 
     # ── 批量操作 ────────────────────────────────────────────────────

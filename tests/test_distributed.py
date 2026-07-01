@@ -154,11 +154,11 @@ class TestFederatedDomain:
 
 class TestFederationHub:
     @pytest.fixture
-    def hub(self):
+    def hub(self, registry):
         import tempfile
 
         config = Path(tempfile.mkdtemp()) / "federation.json"
-        return FederationHub(node_id="test-node", config_path=config)
+        return FederationHub(node_id="test-node", registry=registry, config_path=config)
 
     def test_register_peer(self, hub):
         peer = PeerNode(node_id="peer-1", hostname="peer.local", role="replica")

@@ -64,7 +64,7 @@ class ScenarioEngine:
     """
 
     def __init__(self, registry: DomainRegistry | None = None):
-        self.registry = registry or DomainRegistry()
+        self.registry = registry or DomainRegistry.require_explicit()
         self.health = DomainHealth(self.registry)
         self.signals = SignalBus(self.registry)
         self.plugins = get_plugin_registry()
@@ -93,7 +93,7 @@ class ScenarioEngine:
                 step_result["status"] = "ok"
                 step_result["result"] = result
                 completed += 1
-            except Exception as e:  # defensive fallback  # noqa: BLE001
+            except Exception as e:  # defensive fallback
                 step_result["status"] = "error"
                 step_result["error"] = str(e)
                 failed += 1
@@ -296,7 +296,7 @@ class ScenarioEngine:
                 result["status"] = "ok"
                 result["result"] = str(exec_result)[:200]
                 step_results.append(result)
-            except Exception as e:  # defensive fallback  # noqa: BLE001
+            except Exception as e:  # defensive fallback
                 result["status"] = "error"
                 result["error"] = str(e)
                 failed += 1

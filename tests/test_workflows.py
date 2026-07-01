@@ -11,18 +11,18 @@ from l4_kernel.workflows import (
 
 
 class TestWorkflowStep:
-    def test_create(self):
+    def test_create(self, registry):
         step = WorkflowStep("health_check", "检查健康", domain="vault")
         assert step.action == "health_check"
         assert step.domain == "vault"
 
-    def test_on_error_skip(self):
+    def test_on_error_skip(self, registry):
         step = WorkflowStep("risky_action", "可能失败", on_error="skip")
         assert step.on_error == "skip"
 
 
 class TestWorkflow:
-    def test_create(self):
+    def test_create(self, registry):
         wf = Workflow(
             "test",
             "测试工作流",
@@ -35,8 +35,8 @@ class TestWorkflow:
 
 
 class TestScenarioEngine:
-    def test_execute_health_check(self):
-        engine = ScenarioEngine()
+    def test_execute_health_check(self, registry):
+        engine = ScenarioEngine(registry)
         wf = Workflow(
             "test_health",
             "测试健康",
@@ -48,8 +48,8 @@ class TestScenarioEngine:
         assert result["status"] == "ok"
         assert result["steps_completed"] == 1
 
-    def test_execute_unknown_action(self):
-        engine = ScenarioEngine()
+    def test_execute_unknown_action(self, registry):
+        engine = ScenarioEngine(registry)
         wf = Workflow(
             "test_unknown",
             "测试未知",
@@ -61,8 +61,8 @@ class TestScenarioEngine:
         assert result["status"] == "error"
         assert result["steps_failed"] == 1
 
-    def test_execute_skip_on_error(self):
-        engine = ScenarioEngine()
+    def test_execute_skip_on_error(self, registry):
+        engine = ScenarioEngine(registry)
         wf = Workflow(
             "test_skip",
             "测试跳过",
@@ -74,8 +74,8 @@ class TestScenarioEngine:
         result = engine.execute(wf)
         assert result["steps_completed"] == 1
 
-    def test_execute_multiple_steps(self):
-        engine = ScenarioEngine()
+    def test_execute_multiple_steps(self, registry):
+        engine = ScenarioEngine(registry)
         wf = Workflow(
             "test_multi",
             "测试多步",
@@ -91,40 +91,40 @@ class TestScenarioEngine:
 
 
 class TestPredefinedScenarios:
-    def test_all_scenarios_defined(self):
+    def test_all_scenarios_defined(self, registry):
         assert len(SCENARIOS) >= 5
 
-    def test_research_to_archive(self):
+    def test_research_to_archive(self, registry):
         wf = SCENARIOS["research_to_archive"]
         assert wf.name == "research_to_archive"
         assert len(wf.steps) == 5
 
-    def test_signal_to_fix(self):
+    def test_signal_to_fix(self, registry):
         wf = SCENARIOS["signal_to_fix"]
         assert len(wf.steps) == 5
 
-    def test_weekly_governance(self):
+    def test_weekly_governance(self, registry):
         wf = SCENARIOS["weekly_governance"]
         assert len(wf.steps) == 8
 
-    def test_agent_session(self):
+    def test_agent_session(self, registry):
         wf = SCENARIOS["agent_session"]
         assert len(wf.steps) == 3
 
-    def test_domain_create(self):
+    def test_domain_create(self, registry):
         wf = SCENARIOS["domain_create"]
         assert len(wf.steps) == 2
 
-    def test_run_scenario_health(self):
-        result = run_scenario("agent_session")
+    def test_run_scenario_health(self, registry):
+        result = run_scenario("agent_session", registry=registry)
         assert result["status"] == "ok"
         assert result["steps_completed"] == 3
 
-    def test_run_scenario_nonexistent(self):
+    def test_run_scenario_nonexistent(self, registry):
         result = run_scenario("nonexistent")
         assert result["status"] == "error"
 
-    def test_list_scenarios(self):
+    def test_list_scenarios(self, registry):
         scenarios = list_scenarios()
         assert "research_to_archive" in scenarios
         assert "weekly_governance" in scenarios
