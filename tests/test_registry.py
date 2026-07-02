@@ -53,7 +53,6 @@ class TestDomainRegistry:
             "work-guozhuan",
             "work-docs",
             "opc",
-            "family-shared",
             "obsidian-vault",
             "ai-config",
             "agents-config",
@@ -84,12 +83,12 @@ class TestDomainRegistry:
         assert "vault" in known
         assert "cockpit" in known
         assert "opc" in known
-        assert "family-shared" in known
+        assert "family-shared" not in known  # 2026-07-01 已并入 family 域
 
     def test_list_by_type_document(self, registry):
         reg = registry
         docs = reg.list_by_type("document")
-        assert len(docs) == 12  # 9 original + obsidian-vault + opc + family-shared + work-docs
+        assert len(docs) == 11  # 8 original + obsidian-vault + opc + work-docs (family-shared 已并入 family)
 
     def test_list_by_type_config(self, registry):
         reg = registry
@@ -170,7 +169,7 @@ class TestDomainRegistry:
     def test_list_document_domains(self, registry):
         reg = registry
         docs = reg.list_document_domains()
-        assert len(docs) == 12  # 9 original + obsidian-vault + opc + family-shared + work-docs
+        assert len(docs) == 11  # 8 original + obsidian-vault + opc + work-docs (family-shared 已并入 family)
         assert all(d.domain_type == "document" for d in docs)
 
     def test_work_weijian_path(self, registry):

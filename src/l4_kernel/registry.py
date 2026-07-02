@@ -1,4 +1,4 @@
-"""L4 Domain Registry — 28域统一注册表。
+"""L4 Domain Registry — 27域统一注册表。
 
 SSOT: ~/Documents/@驾驶舱/_control/DOMAIN-INDEX.md (如果不存在则使用硬编码默认值)
 与 L0 MOF M1 domain/DOMAIN-*.yaml 互补: Registry 管理文件系统路径, MOF 管理语义模型。
@@ -51,7 +51,7 @@ class Domain:
         }
 
 
-# ── 内置 28 域默认注册表 (SSOT 回退) ──────────────────────────────
+# ── 内置 27 域默认注册表 (SSOT 回退) ──────────────────────────────
 # ⚠️ 新增域需同时更新三处:
 #  1. 此处 _BUILTIN_DOMAINS (l4-kernel 注册表)
 #  2. DOMAIN-INDEX.md (L4 域注册表)
@@ -59,6 +59,7 @@ class Domain:
 # 测试: tests/test_registry.py (动态断言自动适配)
 # 来源: CLAUDE_COWORK_GLOBAL.md v6.0 + L0 MOF M1 domain/DOMAIN-*.yaml
 # 2026-06-10 更新: 新增 opc/family-shared 域, ID 对齐 DOMAIN-INDEX
+# 2026-07-02 更新: 移除 family-shared (2026-07-01 已物理并入 family 域, 28→27, 对齐 DOMAIN-INDEX v4.6)
 _BUILTIN_DOMAINS: list[Domain] = [
     # ── DocumentDomain (8域) ──
     Domain(
@@ -297,17 +298,6 @@ _BUILTIN_DOMAINS: list[Domain] = [
             "gov.rise_cycle",  # RISE 循环 (R+I+S+E+C) governance-phase-orchestrator
         ],
     ),
-    # ── FamilyShared (DocumentDomain) ──
-    Domain(
-        id="family-shared",
-        name="FamilyShared",
-        domain_type="document",
-        path=Path.home() / "Documents" / "FamilyShared",
-        bos_uri="bos://family-shared/**",
-        kems_planes=["_control", "_entities", "_knowledge", "_storage"],
-        governance_tier=2,
-        capabilities=["knowledge.read", "knowledge.search", "knowledge.create", "knowledge.update", "knowledge.delete"],
-    ),
     # ── L4 Kernel (EngineDomain) ──
     Domain(
         id="l4-kernel",
@@ -362,7 +352,7 @@ _BUILTIN_DOMAINS: list[Domain] = [
 
 
 class DomainRegistry:
-    """L4 28 域统一注册表。
+    """L4 27 域统一注册表。
 
     内置默认注册表基于 CLAUDE_COWORK_GLOBAL.md v6.0。
 
@@ -420,7 +410,7 @@ class DomainRegistry:
         return self._domains.get(domain_id)
 
     def list_all(self) -> list[Domain]:
-        """列出所有 28 域。"""
+        """列出所有 27 域。"""
         return list(self._domains.values())
 
     def list_by_type(self, domain_type: DomainType) -> list[Domain]:

@@ -1,5 +1,6 @@
 """Tests for L4 Kernel domain_types — 7 种域类型特化。"""
 
+import sys
 import tempfile
 from pathlib import Path
 
@@ -233,6 +234,7 @@ class TestModelDomain:
 
 
 class TestEngineDomain:
+    @pytest.mark.skipif(sys.platform != "darwin", reason="launchd 仅 macOS 存在")
     def test_check_process(self, registry):
         d = wrap_domain(make_domain("engine", Path.home()))
         assert isinstance(d, EngineDomain)
