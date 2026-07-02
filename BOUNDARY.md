@@ -35,3 +35,7 @@
 - 项目源码：`projects/l4-kernel/`
 - 入口定义：`projects/l4-kernel/pyproject.toml` 或 `package.json`
 - 测试：`cd projects/l4-kernel && make test`
+
+## 架构演进与项目边界索引
+
+参见工作区架构演进与项目边界：[`../../docs/ARCHITECTURE-EVOLUTION.md`](../../docs/ARCHITECTURE-EVOLUTION.md)
