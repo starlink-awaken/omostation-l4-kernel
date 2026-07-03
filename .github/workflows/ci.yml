@@ -24,7 +24,12 @@ jobs:
         run: uv run ruff format src/ --check
 
   test:
-    runs-on: ubuntu-latest
+    # 2026-07-02: 加 macOS 矩阵 — test_check_process(launchd) 仅 darwin 运行(已加 skipif),
+    # Linux 腿验证可移植性, macOS 腿保住 launchd 用例覆盖
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
