@@ -17,3 +17,19 @@ L4 Kernel is part of the eCOS v6 workspace. See [`../README.md`](../README.md) f
 - Runtime facts (counts, ports, health) are intentionally not maintained here. Use the workspace registries and project source as the truth.
 - For boundaries and call chains, read [`../BOUNDARY.md`](../BOUNDARY.md) and [`../CALLCHAIN.md`](../CALLCHAIN.md).
 - For developer rules, read [`../AGENTS.md`](../AGENTS.md).
+
+## Component Overview
+
+```mermaid
+graph TD
+    User([User / Agent])
+    N0[Registry]
+    N1[MCP Server]
+    Core[Core]
+    N0 --> N1
+    N1 --> Core
+    User --> Core
+```
+
+- Arrows show typical interaction flow, not strict call direction.
+- See [`../CALLCHAIN.md`](../CALLCHAIN.md) for detailed call chains.

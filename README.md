@@ -13,7 +13,20 @@
 
     自我层管理面与域统一注册.
 
-    ## Quick Start
+    ## Installation
+
+```bash
+# Clone the workspace recursively
+git clone --recursive https://github.com/starlink-awaken/omostation.git
+cd omostation/projects/l4-kernel
+
+# Install dependencies with uv
+uv sync
+```
+
+Requires Python 3.13+ (see `pyproject.toml`).
+
+## Quick Start
 
     ```bash
     uv sync
@@ -44,6 +57,7 @@ uv run ruff check "src/"
 - [Changelog](CHANGELOG.md)
 - [License](LICENSE)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Contributors](CONTRIBUTORS.md)
 ## Getting Help
 
 - [FAQ](docs/FAQ.md)
