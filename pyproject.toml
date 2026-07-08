@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "l4-kernel"
 version = "1.0.0"
-description = "L4 Domain Kernel — 自我层管理面：19域统一注册 + KEMS六面操作 + 健康聚合"
+description = "L4 Domain Kernel — 自我层管理面：27域统一注册 + KEMS六面操作 + 健康聚合"
 readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "MIT" }
@@ -13,6 +13,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "model-driven",
     "bus-foundation",
+    "fastmcp>=3.4.2",
 ]
 
 [project.optional-dependencies]

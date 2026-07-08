@@ -556,6 +556,7 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "bus-foundation" },
+    { name = "fastmcp" },
     { name = "model-driven" },
     { name = "pyyaml" },
 ]
@@ -574,6 +575,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bus-foundation", directory = "../bus-foundation" },
+    { name = "fastmcp", specifier = ">=3.4.2" },
     { name = "model-driven", editable = "../model-driven" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },

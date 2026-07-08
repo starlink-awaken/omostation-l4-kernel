@@ -11,7 +11,7 @@ from l4_kernel.registry import _BUILTIN_DOMAINS
 
 
 def default_overrides(tmp_path: Path) -> dict[str, Path]:
-    """为 28 个内置域生成 tmpdir 路径, 注入 DomainRegistry。
+    """为 27 个内置域生成 tmpdir 路径, 注入 DomainRegistry。
 
     保留原 path 后缀 (如 "Documents/@学习进化"), 保持测试断言
     test_resolve_path/test_work_weijian_path 的中文路径期望通过。

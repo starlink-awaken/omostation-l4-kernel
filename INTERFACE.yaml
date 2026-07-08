@@ -2,7 +2,7 @@
 
 project: l4-kernel
 layer: L4
-description: 自我层管理面 — 19域统一注册 + KEMS六面操作 + 健康聚合
+description: 自我层管理面 — 27域统一注册 + KEMS六面操作 + 健康聚合
 
 cli:
   - name: l4-kernel
@@ -24,4 +24,4 @@ dependencies:
   runtime: [pyyaml]
   dev: [pytest, ruff]
 
-tests: 0
+tests: 16  # tests/ 目录下 16 个测试文件，数量随开发变化，以 CI 为准
