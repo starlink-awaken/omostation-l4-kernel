@@ -43,8 +43,8 @@ def load_overrides_from_config(config_path: Path) -> dict[str, Path]:
     if not config_path.exists():
         raise FileNotFoundError(
             f"l4 domain paths config not found: {config_path}. "
-            f"Run scripts/l4_init.py to bootstrap a default config, "
-            f"or create one manually with [domain_paths] section."
+            f"Create it with a [domain_paths] section before running production commands. "
+            f"See src/l4_kernel/config_loader.py for the TOML contract."
         )
 
     with config_path.open("rb") as f:
