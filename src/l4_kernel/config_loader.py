@@ -10,11 +10,15 @@ TOML 格式:
     work-weijian = "/Users/x/Documents/@工作文档/卫健委"
     ...
 
-每个 path 必须存在 (is_dir()) 否则抛 FileNotFoundError, fail-fast。
+路径存在性: 目录不存在时保留条目并告警 (stderr), 由 Domain.exists /
+aggregate_health 如实测量 — 未挂载卷/尚未创建的域是被测量的信号, 不是加载错误。
+(2026-07-15 软化: 原 fail-fast 设计在外接卷 /Volumes/* 未挂载时会拖垮整个
+域注册表加载, 与 aggregate_health 的 existing/total 语义冲突。)
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 try:
@@ -35,7 +39,6 @@ def load_overrides_from_config(config_path: Path) -> dict[str, Path]:
     Raises:
         FileNotFoundError: config_path 不存在
         KeyError: 缺 [domain_paths] section
-        ValueError: 某 path 不是目录
     """
     if not config_path.exists():
         raise FileNotFoundError(
@@ -56,9 +59,10 @@ def load_overrides_from_config(config_path: Path) -> dict[str, Path]:
     for domain_id, path_str in data["domain_paths"].items():
         p = Path(path_str).expanduser().resolve()
         if not p.is_dir():
-            raise ValueError(
-                f"Domain {domain_id!r} path {p} is not a directory. "
-                f"Create the directory or fix the path in {config_path}."
+            print(
+                f"⚠ l4 domain {domain_id!r} path {p} not a directory "
+                f"(unmounted volume / not yet created) — kept, health will report it",
+                file=sys.stderr,
             )
         overrides[domain_id] = p
     return overrides
