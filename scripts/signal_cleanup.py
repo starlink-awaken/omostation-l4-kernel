@@ -19,13 +19,16 @@ from pathlib import Path
 # 添加 src 到 path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from l4_kernel.config_loader import load_overrides_from_config
 from l4_kernel.kems import KemsPlane
 from l4_kernel.registry import DomainRegistry
+
+CONFIG_PATH = Path(__file__).parent.parent / "l4_domain_paths.toml"
 
 
 def cleanup_signals(days: int = 7, dry_run: bool = False) -> dict:
     """清理旧信号。"""
-    registry = DomainRegistry()
+    registry = DomainRegistry(path_overrides=load_overrides_from_config(CONFIG_PATH))
     cutoff = datetime.now(UTC) - timedelta(days=days)
 
     result = {

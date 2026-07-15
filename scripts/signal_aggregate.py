@@ -19,8 +19,11 @@ from pathlib import Path
 # 添加 src 到 path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from l4_kernel.config_loader import load_overrides_from_config
 from l4_kernel.kems import KemsPlane
 from l4_kernel.registry import DomainRegistry
+
+CONFIG_PATH = Path(__file__).parent.parent / "l4_domain_paths.toml"
 
 
 def aggregate_window(signals: list[dict]) -> dict:
@@ -54,7 +57,7 @@ def aggregate_window(signals: list[dict]) -> dict:
 
 def aggregate_signals(window_minutes: int = 5, dry_run: bool = False) -> dict:
     """聚合相似信号。"""
-    registry = DomainRegistry()
+    registry = DomainRegistry(path_overrides=load_overrides_from_config(CONFIG_PATH))
 
     result = {
         "total_aggregated": 0,
