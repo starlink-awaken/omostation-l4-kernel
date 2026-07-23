@@ -51,6 +51,7 @@ class TestDomainRegistry:
             "family",
             "work-weijian",
             "work-guozhuan",
+            "work-liyongke",
             "work-docs",
             "opc",
             "obsidian-vault",
@@ -88,7 +89,7 @@ class TestDomainRegistry:
     def test_list_by_type_document(self, registry):
         reg = registry
         docs = reg.list_by_type("document")
-        assert len(docs) == 11  # 8 original + obsidian-vault + opc + work-docs (family-shared 已并入 family)
+        assert len(docs) == 12  # 8 original + obsidian-vault + opc + work-docs (family-shared 已并入 family)
 
     def test_list_by_type_config(self, registry):
         reg = registry
@@ -169,7 +170,7 @@ class TestDomainRegistry:
     def test_list_document_domains(self, registry):
         reg = registry
         docs = reg.list_document_domains()
-        assert len(docs) == 11  # 8 original + obsidian-vault + opc + work-docs (family-shared 已并入 family)
+        assert len(docs) == 12  # 8 original + obsidian-vault + opc + work-docs (family-shared 已并入 family)
         assert all(d.domain_type == "document" for d in docs)
 
     def test_work_weijian_path(self, registry):
