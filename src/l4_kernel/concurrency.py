@@ -13,7 +13,7 @@ from pathlib import Path
 
 # 从 L0 引入基础接口 (假设 ecos 已经可以通过 PYTHONPATH 或 workspace 配置访问)
 try:
-    from ecos.l0.concurrency import DistributedLock, LockAcquireError
+    from ecos.l0.concurrency import DistributedLock, LockAcquireError  # type: ignore[reportMissingImports]
 except ImportError:
     # 垫片防腐层: 在还没发布 ecos package 前防止 l4-kernel 本地挂掉
     class LockAcquireError(Exception):
@@ -24,7 +24,7 @@ except ImportError:
             self.name = name
 
 
-class L4FileLock(DistributedLock):
+class L4FileLock(DistributedLock):  # type: ignore[reportGeneralTypeIssues]
     """基于 fcntl.flock 的本地文件锁，向下兼容。"""
 
     def __init__(self, filepath: Path | str):

@@ -40,48 +40,58 @@ class DomainRelations:
     def _init_default_relations(self) -> None:
         """初始化默认关系。"""
         # 层次关系（contains）
-        self._relations.extend([
-            DomainRelation("work-docs", "work-weijian", "contains", "@工作文档 包含 卫健委"),
-            DomainRelation("work-docs", "work-guozhuan", "contains", "@工作文档 包含 国转中心"),
-        ])
+        self._relations.extend(
+            [
+                DomainRelation("work-docs", "work-weijian", "contains", "@工作文档 包含 卫健委"),
+                DomainRelation("work-docs", "work-guozhuan", "contains", "@工作文档 包含 国转中心"),
+            ]
+        )
 
         # 依赖关系（depends_on）
-        self._relations.extend([
-            DomainRelation("cockpit", "vault", "depends_on", "@驾驶舱 依赖 @学习进化 的知识"),
-            DomainRelation("cockpit", "omo-governance", "depends_on", "@驾驶舱 依赖 OMO 治理数据"),
-            DomainRelation("cockpit", "ecos-workbench", "depends_on", "@驾驶舱 依赖 eCOS 工作台"),
-            DomainRelation("metaos", "agora", "depends_on", "MetaOS 依赖 Agora 路由"),
-            DomainRelation("metaos", "l4-kernel", "depends_on", "MetaOS 依赖 L4 Kernel 域管理"),
-            DomainRelation("runtime", "agora", "depends_on", "Runtime 依赖 Agora 路由"),
-            DomainRelation("runtime", "omo-governance", "depends_on", "Runtime 依赖 OMO 治理"),
-        ])
+        self._relations.extend(
+            [
+                DomainRelation("cockpit", "vault", "depends_on", "@驾驶舱 依赖 @学习进化 的知识"),
+                DomainRelation("cockpit", "omo-governance", "depends_on", "@驾驶舱 依赖 OMO 治理数据"),
+                DomainRelation("cockpit", "ecos-workbench", "depends_on", "@驾驶舱 依赖 eCOS 工作台"),
+                DomainRelation("metaos", "agora", "depends_on", "MetaOS 依赖 Agora 路由"),
+                DomainRelation("metaos", "l4-kernel", "depends_on", "MetaOS 依赖 L4 Kernel 域管理"),
+                DomainRelation("runtime", "agora", "depends_on", "Runtime 依赖 Agora 路由"),
+                DomainRelation("runtime", "omo-governance", "depends_on", "Runtime 依赖 OMO 治理"),
+            ]
+        )
 
         # 提供关系（provides）
-        self._relations.extend([
-            DomainRelation("vault", "cockpit", "provides", "@学习进化 提供知识给 @驾驶舱"),
-            DomainRelation("omo-governance", "cockpit", "provides", "OMO 提供治理数据给 @驾驶舱"),
-            DomainRelation("ecos-workbench", "cockpit", "provides", "eCOS 提供工作台给 @驾驶舱"),
-            DomainRelation("agora", "metaos", "provides", "Agora 提供路由给 MetaOS"),
-            DomainRelation("l4-kernel", "metaos", "provides", "L4 Kernel 提供域管理给 MetaOS"),
-            DomainRelation("agora", "runtime", "provides", "Agora 提供路由给 Runtime"),
-            DomainRelation("omo-governance", "runtime", "provides", "OMO 提供治理给 Runtime"),
-        ])
+        self._relations.extend(
+            [
+                DomainRelation("vault", "cockpit", "provides", "@学习进化 提供知识给 @驾驶舱"),
+                DomainRelation("omo-governance", "cockpit", "provides", "OMO 提供治理数据给 @驾驶舱"),
+                DomainRelation("ecos-workbench", "cockpit", "provides", "eCOS 提供工作台给 @驾驶舱"),
+                DomainRelation("agora", "metaos", "provides", "Agora 提供路由给 MetaOS"),
+                DomainRelation("l4-kernel", "metaos", "provides", "L4 Kernel 提供域管理给 MetaOS"),
+                DomainRelation("agora", "runtime", "provides", "Agora 提供路由给 Runtime"),
+                DomainRelation("omo-governance", "runtime", "provides", "OMO 提供治理给 Runtime"),
+            ]
+        )
 
         # 使用关系（uses）
-        self._relations.extend([
-            DomainRelation("creative", "vault", "uses", "@创意创作 使用 @学习进化 的知识"),
-            DomainRelation("personal", "vault", "uses", "@个人 使用 @学习进化 的知识"),
-            DomainRelation("family", "vault", "uses", "@家庭生活 使用 @学习进化 的知识"),
-            DomainRelation("work-weijian", "vault", "uses", "卫健委 使用 @学习进化 的知识"),
-            DomainRelation("work-guozhuan", "vault", "uses", "国转中心 使用 @学习进化 的知识"),
-        ])
+        self._relations.extend(
+            [
+                DomainRelation("creative", "vault", "uses", "@创意创作 使用 @学习进化 的知识"),
+                DomainRelation("personal", "vault", "uses", "@个人 使用 @学习进化 的知识"),
+                DomainRelation("family", "vault", "uses", "@家庭生活 使用 @学习进化 的知识"),
+                DomainRelation("work-weijian", "vault", "uses", "卫健委 使用 @学习进化 的知识"),
+                DomainRelation("work-guozhuan", "vault", "uses", "国转中心 使用 @学习进化 的知识"),
+            ]
+        )
 
         # 相关关系（related）
-        self._relations.extend([
-            DomainRelation("family", "family-shared", "related", "@家庭生活 与 FamilyShared 相关"),
-            DomainRelation("ai-config", "agents-config", "related", "AI 配置 与 Agent 配置 相关"),
-            DomainRelation("model-volume", "sharedmodel", "related", "Model 与 SharedModel 相关"),
-        ])
+        self._relations.extend(
+            [
+                DomainRelation("family", "family-shared", "related", "@家庭生活 与 FamilyShared 相关"),
+                DomainRelation("ai-config", "agents-config", "related", "AI 配置 与 Agent 配置 相关"),
+                DomainRelation("model-volume", "sharedmodel", "related", "Model 与 SharedModel 相关"),
+            ]
+        )
 
     def add_relation(self, relation: DomainRelation) -> None:
         """添加关系。"""
@@ -107,8 +117,7 @@ class DomainRelations:
 
     def get_children(self, domain_id: str) -> list[str]:
         """获取子域列表。"""
-        return [r.target for r in self._relations
-                if r.source == domain_id and r.relation_type == "contains"]
+        return [r.target for r in self._relations if r.source == domain_id and r.relation_type == "contains"]
 
     def get_parent(self, domain_id: str) -> str | None:
         """获取父域。"""
@@ -119,23 +128,19 @@ class DomainRelations:
 
     def get_dependencies(self, domain_id: str) -> list[str]:
         """获取依赖域列表。"""
-        return [r.target for r in self._relations
-                if r.source == domain_id and r.relation_type == "depends_on"]
+        return [r.target for r in self._relations if r.source == domain_id and r.relation_type == "depends_on"]
 
     def get_dependents(self, domain_id: str) -> list[str]:
         """获取依赖于当前域的域列表。"""
-        return [r.source for r in self._relations
-                if r.target == domain_id and r.relation_type == "depends_on"]
+        return [r.source for r in self._relations if r.target == domain_id and r.relation_type == "depends_on"]
 
     def get_providers(self, domain_id: str) -> list[str]:
         """获取提供者列表。"""
-        return [r.source for r in self._relations
-                if r.target == domain_id and r.relation_type == "provides"]
+        return [r.source for r in self._relations if r.target == domain_id and r.relation_type == "provides"]
 
     def get_consumers(self, domain_id: str) -> list[str]:
         """获取消费者列表。"""
-        return [r.target for r in self._relations
-                if r.source == domain_id and r.relation_type == "provides"]
+        return [r.target for r in self._relations if r.source == domain_id and r.relation_type == "provides"]
 
     def get_related(self, domain_id: str) -> list[str]:
         """获取相关域列表。"""

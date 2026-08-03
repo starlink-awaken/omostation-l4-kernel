@@ -51,7 +51,7 @@ def cmd_list(args: list[str]) -> int:
             domain_type = a.split("=", 1)[1]
 
     if domain_type:
-        domains = registry.list_by_type(domain_type)
+        domains = registry.list_by_type(domain_type)  # type: ignore[reportArgumentType]
     else:
         domains = registry.list_all()
 
@@ -322,7 +322,7 @@ def main() -> int:
         from l4_kernel.mcp_server import main as mcp_main
 
         sys.argv = ["l4-kernel"] + args[1:]
-        return mcp_main()
+        return mcp_main()  # type: ignore[reportReturnType]
 
     print(f"未知命令: {cmd}", file=sys.stderr)
     return 1

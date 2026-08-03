@@ -62,7 +62,7 @@ def make_domain(domain_type: str, path: Path, **kwargs) -> Domain:
     return Domain(
         id=f"test-{domain_type}",
         name=f"Test {domain_type}",
-        domain_type=domain_type,
+        domain_type=domain_type,  # type: ignore[reportArgumentType]
         path=path,
         bos_uri=f"bos://test-{domain_type}/**",
         kems_planes=kwargs.get("kems_planes", []),
@@ -85,12 +85,12 @@ class TestDocumentDomain:
 
     def test_validate_kems_planes_missing(self, temp_doc_domain):
         d = wrap_domain(make_domain("document", temp_doc_domain, kems_planes=["_control", "_runtime"]))
-        missing = d.validate_kems_planes()
+        missing = d.validate_kems_planes()  # type: ignore[reportAttributeAccessIssue]
         assert "_runtime" in missing[0]
 
     def test_get_control_files(self, temp_doc_domain):
         d = wrap_domain(make_domain("document", temp_doc_domain))
-        files = d.get_control_files()
+        files = d.get_control_files()  # type: ignore[reportAttributeAccessIssue]
         assert files["STATE.md"] is True
         assert files["MEMORY.md"] is True
         assert files["CLAUDE.md"] is True
@@ -98,7 +98,7 @@ class TestDocumentDomain:
 
     def test_get_storage_stats(self, temp_doc_domain):
         d = wrap_domain(make_domain("document", temp_doc_domain))
-        stats = d.get_storage_stats()
+        stats = d.get_storage_stats()  # type: ignore[reportAttributeAccessIssue]
         assert stats["files"] >= 1
         assert stats["total_size_mb"] >= 0
 
@@ -115,29 +115,29 @@ class TestConfigDomain:
 
     def test_read_yaml_config(self, temp_config_domain):
         d = wrap_domain(make_domain("config", temp_config_domain))
-        data = d.read_config("config.yaml")
+        data = d.read_config("config.yaml")  # type: ignore[reportAttributeAccessIssue]
         assert data is not None
         assert data["key"] == "value"
 
     def test_read_json_config(self, temp_config_domain):
         d = wrap_domain(make_domain("config", temp_config_domain))
-        data = d.read_config("settings.json")
+        data = d.read_config("settings.json")  # type: ignore[reportAttributeAccessIssue]
         assert data is not None
         assert data["port"] == 8080
 
     def test_read_missing_config(self, temp_config_domain):
         d = wrap_domain(make_domain("config", temp_config_domain))
-        assert d.read_config("nonexistent.yaml") is None
+        assert d.read_config("nonexistent.yaml") is None  # type: ignore[reportAttributeAccessIssue]
 
     def test_validate_schema_valid(self, temp_config_domain):
         d = wrap_domain(make_domain("config", temp_config_domain))
-        result = d.validate_schema("config.yaml")
+        result = d.validate_schema("config.yaml")  # type: ignore[reportAttributeAccessIssue]
         assert result["valid"] is True
         assert "key" in result["keys"]
 
     def test_validate_schema_missing(self, temp_config_domain):
         d = wrap_domain(make_domain("config", temp_config_domain))
-        result = d.validate_schema("nonexistent.yaml")
+        result = d.validate_schema("nonexistent.yaml")  # type: ignore[reportAttributeAccessIssue]
         assert result["valid"] is False
 
 
@@ -154,13 +154,13 @@ class TestToolDomain:
 
     def test_check_tool_exists(self, temp_tool_domain):
         d = wrap_domain(make_domain("tool", temp_tool_domain))
-        result = d.check_tool("hello.sh")
+        result = d.check_tool("hello.sh")  # type: ignore[reportAttributeAccessIssue]
         assert result["status"] == "ok"
         assert result["executable"] is True
 
     def test_check_tool_not_found(self, temp_tool_domain):
         d = wrap_domain(make_domain("tool", temp_tool_domain))
-        result = d.check_tool("nonexistent.sh")
+        result = d.check_tool("nonexistent.sh")  # type: ignore[reportAttributeAccessIssue]
         assert result["status"] == "not_found"
 
 
@@ -176,13 +176,13 @@ class TestWorkspaceDomain:
 
     def test_search_files(self, temp_config_domain):
         d = wrap_domain(make_domain("workspace", temp_config_domain))
-        results = d.search_files("config")
+        results = d.search_files("config")  # type: ignore[reportAttributeAccessIssue]
         assert len(results) == 1
         assert "config.yaml" in results[0]
 
     def test_search_no_match(self, temp_config_domain):
         d = wrap_domain(make_domain("workspace", temp_config_domain))
-        assert d.search_files("nonexistent_xyz") == []
+        assert d.search_files("nonexistent_xyz") == []  # type: ignore[reportAttributeAccessIssue]
 
 
 # ── StorageDomain ───────────────────────────────────────────────────
@@ -200,12 +200,12 @@ class TestStorageDomain:
 
     def test_check_mount_status(self, registry):
         d = wrap_domain(make_domain("storage", Path("/")))
-        status = d.check_mount_status()
+        status = d.check_mount_status()  # type: ignore[reportAttributeAccessIssue]
         assert status["mounted"] is True
 
     def test_check_mount_status_missing(self, registry):
         d = wrap_domain(make_domain("storage", Path("/nonexistent_volume_xyz")))
-        status = d.check_mount_status()
+        status = d.check_mount_status()  # type: ignore[reportAttributeAccessIssue]
         assert status["mounted"] is False
 
 
@@ -221,13 +221,13 @@ class TestModelDomain:
 
     def test_get_model_checksum(self, temp_config_domain):
         d = wrap_domain(make_domain("model", temp_config_domain))
-        checksum = d.get_model_checksum("config.yaml")
+        checksum = d.get_model_checksum("config.yaml")  # type: ignore[reportAttributeAccessIssue]
         assert checksum is not None
         assert len(checksum) == 64  # SHA256
 
     def test_get_model_checksum_missing(self, temp_config_domain):
         d = wrap_domain(make_domain("model", temp_config_domain))
-        assert d.get_model_checksum("nonexistent.bin") is None
+        assert d.get_model_checksum("nonexistent.bin") is None  # type: ignore[reportAttributeAccessIssue]
 
 
 # ── EngineDomain ────────────────────────────────────────────────────
@@ -243,26 +243,26 @@ class TestEngineDomain:
 
     def test_check_process_nonexistent(self, registry):
         d = wrap_domain(make_domain("engine", Path.home()))
-        result = d.check_process("nonexistent_process_xyz_12345")
+        result = d.check_process("nonexistent_process_xyz_12345")  # type: ignore[reportAttributeAccessIssue]
         assert result["running"] is False
 
     def test_get_config_missing(self, temp_config_domain):
         # temp_config_domain already has config.yaml — use a different empty dir
         with tempfile.TemporaryDirectory() as td:
             d = wrap_domain(make_domain("engine", Path(td)))
-            assert d.get_config() is None
+            assert d.get_config() is None  # type: ignore[reportAttributeAccessIssue]
 
     def test_get_config(self, temp_config_domain):
         # Create a config.yaml
         (temp_config_domain / "config.yaml").write_text("port: 8765\n")
         d = wrap_domain(make_domain("engine", temp_config_domain))
-        config = d.get_config()
+        config = d.get_config()  # type: ignore[reportAttributeAccessIssue]
         assert config is not None
         assert config["port"] == 8765
 
     def test_get_logs_empty(self, temp_config_domain):
         d = wrap_domain(make_domain("engine", temp_config_domain))
-        assert d.get_logs() == []
+        assert d.get_logs() == []  # type: ignore[reportAttributeAccessIssue]
 
 
 # ── wrap_domain ─────────────────────────────────────────────────────

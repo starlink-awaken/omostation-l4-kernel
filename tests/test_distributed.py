@@ -44,10 +44,11 @@ class TestConcurrencyManager:
 
             # 尝试获取锁应该超时
             try:
-                from l4_kernel.concurrency import LockAcquireError
+                from l4_kernel.concurrency import LockAcquireError  # type: ignore[reportAttributeAccessIssue]
+
                 with mgr.lock(path, timeout=0.5):
                     pass
-            except (TimeoutError, LockAcquireError, OSError):
+            except (TimeoutError, LockAcquireError, OSError):  # type: ignore[reportPossiblyUnboundVariable]
                 pass  # 预期行为
 
             release.set()

@@ -51,9 +51,7 @@ def load_overrides_from_config(config_path: Path) -> dict[str, Path]:
         data = tomllib.load(f)
 
     if "domain_paths" not in data:
-        raise KeyError(
-            f"TOML config {config_path} missing required [domain_paths] section"
-        )
+        raise KeyError(f"TOML config {config_path} missing required [domain_paths] section")
 
     overrides: dict[str, Path] = {}
     for domain_id, path_str in data["domain_paths"].items():

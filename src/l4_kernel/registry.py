@@ -70,7 +70,14 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://cockpit/**",
         kems_planes=["_control", "_knowledge", "_runtime", "_generated", "_meta", "_archive"],
         governance_tier=1,
-        capabilities=["knowledge.read", "knowledge.search", "cards.manage", "governance.read", "governance.audit", "signal.emit"],
+        capabilities=[
+            "knowledge.read",
+            "knowledge.search",
+            "cards.manage",
+            "governance.read",
+            "governance.audit",
+            "signal.emit",
+        ],
     ),
     Domain(
         id="vault",
@@ -80,7 +87,14 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://vault/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive"],
         governance_tier=1,
-        capabilities=["knowledge.read", "knowledge.search", "knowledge.archive", "knowledge.create", "knowledge.update", "knowledge.delete"],
+        capabilities=[
+            "knowledge.read",
+            "knowledge.search",
+            "knowledge.archive",
+            "knowledge.create",
+            "knowledge.update",
+            "knowledge.delete",
+        ],
     ),
     Domain(
         id="creative",
@@ -110,7 +124,14 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://shared/**",
         kems_planes=["_control", "_entities", "_knowledge", "_runtime"],
         governance_tier=2,
-        capabilities=["knowledge.read", "knowledge.search", "entity.resolve", "shared.read", "shared.write", "shared.search"],
+        capabilities=[
+            "knowledge.read",
+            "knowledge.search",
+            "entity.resolve",
+            "shared.read",
+            "shared.write",
+            "shared.search",
+        ],
     ),
     Domain(
         id="family",
@@ -130,7 +151,14 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://work-weijian/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive", "_runtime"],
         governance_tier=1,
-        capabilities=["knowledge.read", "document.generate", "task.manage", "document.read", "document.write", "document.search"],
+        capabilities=[
+            "knowledge.read",
+            "document.generate",
+            "task.manage",
+            "document.read",
+            "document.write",
+            "document.search",
+        ],
     ),
     Domain(
         id="work-guozhuan",
@@ -140,7 +168,14 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://work-guozhuan/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage", "_archive", "_runtime"],
         governance_tier=1,
-        capabilities=["knowledge.read", "research.run", "task.manage", "document.read", "document.write", "document.search"],
+        capabilities=[
+            "knowledge.read",
+            "research.run",
+            "task.manage",
+            "document.read",
+            "document.write",
+            "document.search",
+        ],
     ),
     Domain(
         id="work-liyongke",
@@ -161,7 +196,14 @@ _BUILTIN_DOMAINS: list[Domain] = [
         bos_uri="bos://work-docs/**",
         kems_planes=["_control", "_entities", "_knowledge", "_storage"],
         governance_tier=1,
-        capabilities=["domain.route", "knowledge.read", "knowledge.search", "document.read", "document.write", "document.search"],
+        capabilities=[
+            "domain.route",
+            "knowledge.read",
+            "knowledge.search",
+            "document.read",
+            "document.write",
+            "document.search",
+        ],
     ),
     # ── ConfigDomain (3域) ──
     Domain(
@@ -393,10 +435,7 @@ class DomainRegistry:
         builtin_ids = {d.id for d in _BUILTIN_DOMAINS}
         for d in _BUILTIN_DOMAINS:
             if d.id not in path_overrides:
-                raise ValueError(
-                    f"Domain {d.id!r} missing from path_overrides. "
-                    f"Required keys: {sorted(builtin_ids)}"
-                )
+                raise ValueError(f"Domain {d.id!r} missing from path_overrides. Required keys: {sorted(builtin_ids)}")
             d = replace(d, path=path_overrides[d.id])
             self._domains[d.id] = d
 

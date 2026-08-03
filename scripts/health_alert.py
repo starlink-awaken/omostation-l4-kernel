@@ -146,12 +146,12 @@ def send_email_alert(message: str, level: str = "warning") -> bool:
         level_info = ALERT_LEVELS.get(level, ALERT_LEVELS["warning"])
         msg = MIMEText(message)
         msg["Subject"] = f"[{level_info['name']}] L4 Domain Health Alert"
-        msg["From"] = smtp_user
-        msg["To"] = alert_email
+        msg["From"] = smtp_user  # type: ignore[reportArgumentType]
+        msg["To"] = alert_email  # type: ignore[reportArgumentType]
 
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:  # type: ignore[reportArgumentType]
             server.starttls()
-            server.login(smtp_user, smtp_pass)
+            server.login(smtp_user, smtp_pass)  # type: ignore[reportArgumentType]
             server.send_message(msg)
 
         return True
@@ -238,7 +238,7 @@ def run_health_check() -> dict:
         return json.loads(result.stdout)
     else:
         print(f"健康检查失败: {result.stderr}")
-        return None
+        return None  # type: ignore[reportReturnType]
 
 
 def run_trend_analysis() -> dict:
@@ -254,7 +254,7 @@ def run_trend_analysis() -> dict:
         return json.loads(result.stdout)
     else:
         print(f"趋势分析失败: {result.stderr}")
-        return None
+        return None  # type: ignore[reportReturnType]
 
 
 def run_signal_analysis() -> dict:
@@ -270,7 +270,7 @@ def run_signal_analysis() -> dict:
         return json.loads(result.stdout)
     else:
         print(f"信号分析失败: {result.stderr}")
-        return None
+        return None  # type: ignore[reportReturnType]
 
 
 def evaluate_rules(health_data: dict, trend_data: dict, signal_data: dict) -> list[dict]:

@@ -189,7 +189,7 @@ class ScenarioEngine:
         builtin = {
             "health_check": lambda: self.health.aggregate_health(),
             "freshness_check": lambda: self.health.check_freshness(domain),
-            "validate_domain": lambda: self._validate_domain(domain),
+            "validate_domain": lambda: self._validate_domain(domain),  # type: ignore[reportAttributeAccessIssue]
             "scan_cards": lambda: self._scan_cards(),
             "generate_dashboard": lambda: self.health.generate_dashboard(),
             "aggregate_signals": lambda: self.signals.aggregate_recent(),
@@ -232,7 +232,7 @@ class ScenarioEngine:
             return {"status": "error", "message": str(e)}
 
     def _action_append_signal(self, domain_id, message, source="l4-kernel", signal_type="ℹ️"):
-        ok = self.signals.emit(domain_id, signal_type, message, source=source)
+        ok = self.signals.emit(domain_id, signal_type, message, source=source)  # type: ignore[reportArgumentType]
         return {"status": "ok" if ok else "error", "message": message, "type": signal_type}
 
     def _action_create_entry(self, domain_path, parent_dir, title, content=""):

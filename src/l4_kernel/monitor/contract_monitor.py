@@ -37,10 +37,16 @@ def find_modified_commits(days_back: int = DEFAULT_LOOKBACK_DAYS) -> list[str]:
     try:
         result = subprocess.run(
             [
-                "git", "log", f"--since={days_back} days ago",
-                "--pretty=format:%H", "--name-only", BOS_SERVICES_REL,
+                "git",
+                "log",
+                f"--since={days_back} days ago",
+                "--pretty=format:%H",
+                "--name-only",
+                BOS_SERVICES_REL,
             ],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         if result.returncode != 0:
             return []
@@ -65,7 +71,9 @@ def check_commit_for_lint(sha: str) -> bool:
     try:
         result = subprocess.run(
             ["git", "log", "-1", "--pretty=format:%B", sha],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0:
             message = result.stdout.lower()
@@ -96,7 +104,7 @@ type: "governance"
 A potential bypass of the BOS Contract Linter was detected.
 
 **Details**:
-- Suspicious Commits: {', '.join(suspicious_shas)}
+- Suspicious Commits: {", ".join(suspicious_shas)}
 - Timestamp: {timestamp}
 - Detection Window: {DEFAULT_LOOKBACK_DAYS} days
 - Next Steps: Investigate these commits and ensure all future bos-services.yaml

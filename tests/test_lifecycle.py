@@ -13,6 +13,7 @@ from l4_kernel.registry import DomainRegistry
 def registry(tmp_path):
     """P52-final: 用 tmp_path 构造 path_overrides。"""
     from l4_kernel.testing import default_overrides
+
     return DomainRegistry(path_overrides=default_overrides(tmp_path))
 
 

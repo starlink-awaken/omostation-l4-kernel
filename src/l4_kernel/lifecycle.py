@@ -104,7 +104,7 @@ class DomainLifecycle:
         domain = Domain(
             id=domain_id,
             name=name,
-            domain_type=domain_type,
+            domain_type=domain_type,  # type: ignore[reportArgumentType]
             path=path,
             bos_uri=bos,
             kems_planes=kems_planes or [],
@@ -376,7 +376,7 @@ class DomainLifecycle:
         if not _MD_AVAILABLE:
             return None
         try:
-            mgr = LifecycleManager()
+            mgr = LifecycleManager()  # type: ignore[reportOptionalCall]
             summary = mgr.get_stage_summary(domain_id)
             return summary
         except Exception:  # defensive fallback
@@ -387,7 +387,7 @@ class DomainLifecycle:
         if not _MD_AVAILABLE:
             return None
         try:
-            mgr = LifecycleManager()
+            mgr = LifecycleManager()  # type: ignore[reportOptionalCall]
             dashboard = mgr.generate_dashboard()
             return {
                 "total_entities": dashboard.total_entities,
@@ -404,7 +404,7 @@ class DomainLifecycle:
             return {"status": "error", "message": "model-driven 不可用"}
 
         try:
-            mgr = LifecycleManager()
+            mgr = LifecycleManager()  # type: ignore[reportOptionalCall]
             mgr.create_tracker(domain_id, entity_type)
             return {"status": "ok", "message": f"已为 {domain_id} 创建生命周期追踪"}
         except Exception as e:  # defensive fallback
@@ -418,12 +418,12 @@ class DomainLifecycle:
         try:
             from model_driven.lifecycle.transitions import TransitionEngine
 
-            mgr = LifecycleManager()
+            mgr = LifecycleManager()  # type: ignore[reportOptionalCall]
             tracker = mgr.get_tracker(domain_id)
             if not tracker:
                 tracker = mgr.create_tracker(domain_id, "domain")
 
-            target = LifecycleStage.from_str(target_stage)
+            target = LifecycleStage.from_str(target_stage)  # type: ignore[reportOptionalMemberAccess]
             engine = TransitionEngine()
             success, msg, _ = engine.try_transition(tracker, target)
 
@@ -441,8 +441,8 @@ class DomainLifecycle:
             return {"status": "error", "message": "model-driven 不可用"}
 
         try:
-            pt = PipelineTracker(entity_id=domain_id, entity_type="domain")
-            pt.start_phase(PipelinePhase.COLD_START)
+            pt = PipelineTracker(entity_id=domain_id, entity_type="domain")  # type: ignore[reportOptionalCall]
+            pt.start_phase(PipelinePhase.COLD_START)  # type: ignore[reportOptionalMemberAccess]
             return {
                 "status": "ok",
                 "message": f"已为 {domain_id} 创建三阶段流水线 (当前: ColdStart)",
@@ -478,7 +478,7 @@ class DomainLifecycle:
                         except Exception:  # defensive fallback
                             pass
 
-            engine = DerivationEngine()
+            engine = DerivationEngine()  # type: ignore[reportOptionalCall]
             engine.execute_all(nodes)
             summary = engine.get_summary()
             return summary
@@ -506,7 +506,7 @@ class DomainLifecycle:
                         except Exception:  # defensive fallback
                             pass
 
-            engine = DerivationEngine()
+            engine = DerivationEngine()  # type: ignore[reportOptionalCall]
             engine.execute_all(nodes)
             return engine.get_summary()
         except Exception:  # defensive fallback
@@ -517,10 +517,10 @@ class DomainLifecycle:
         if not _MD_AVAILABLE:
             return None
         try:
-            mgr = LifecycleManager()
+            mgr = LifecycleManager()  # type: ignore[reportOptionalCall]
             pipelines = {}
             for entity_id in mgr.list_entities():
-                pt = PipelineTracker(entity_id=entity_id)
+                pt = PipelineTracker(entity_id=entity_id)  # type: ignore[reportOptionalCall]
                 pipelines[entity_id] = pt.get_progress()
             return {
                 "total": len(pipelines),

@@ -4,6 +4,7 @@ P52-final 真治本: 利用 l4_kernel.testing.default_overrides(tmp_path),
 传入 DomainRegistry(path_overrides=...)。与生产同款机制 (TOML 注入),
 无 env 兜底, 无 Path.home() 默认。
 """
+
 import pytest
 
 from l4_kernel.domain_types import clear_wrap_cache
@@ -28,11 +29,7 @@ def l4_test_config(tmp_path, monkeypatch):
 
     overrides = default_overrides(tmp_path)
     config_path = tmp_path / "l4_domain_paths.toml"
-    config_path.write_text(
-        "[domain_paths]\n"
-        + "\n".join(f'{k} = "{v}"' for k, v in overrides.items())
-        + "\n"
-    )
+    config_path.write_text("[domain_paths]\n" + "\n".join(f'{k} = "{v}"' for k, v in overrides.items()) + "\n")
 
     monkeypatch.setattr(cli, "DEFAULT_CONFIG_PATH", config_path)
     monkeypatch.setattr(mcp_server, "_globals", None)
@@ -49,6 +46,7 @@ def registry(tmp_path, l4_test_config):
     替代测试里直接 `DomainRegistry()` 无参调用 (现已禁用)。
     """
     from l4_kernel import DomainRegistry
+
     return DomainRegistry(path_overrides=default_overrides(tmp_path))
 
 

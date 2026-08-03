@@ -60,9 +60,7 @@ def _get_globals() -> dict:
         from l4_kernel.cli import DEFAULT_CONFIG_PATH
         from l4_kernel.config_loader import load_overrides_from_config
 
-        registry = DomainRegistry(
-            path_overrides=load_overrides_from_config(DEFAULT_CONFIG_PATH)
-        )
+        registry = DomainRegistry(path_overrides=load_overrides_from_config(DEFAULT_CONFIG_PATH))
         _globals = {
             "registry": registry,
             "health": DomainHealth(registry),
@@ -678,7 +676,7 @@ def l4_config_read(domain_id: str, path: str) -> str:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
     if hasattr(w, "read_config"):
-        data = w.read_config(path)
+        data = w.read_config(path)  # type: ignore[reportAttributeAccessIssue]
         return json.dumps(data, ensure_ascii=False, default=str) if data else _err("Config not found")
     return _err(f"Domain '{domain_id}' is not a config domain")
 
@@ -692,7 +690,7 @@ def l4_tools_list(domain_id: str) -> str:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
     if hasattr(w, "list_tools"):
-        return json.dumps(w.list_tools(), ensure_ascii=False, default=str)
+        return json.dumps(w.list_tools(), ensure_ascii=False, default=str)  # type: ignore[reportAttributeAccessIssue]
     return _err(f"Domain '{domain_id}' is not a tool domain")
 
 
@@ -705,7 +703,7 @@ def l4_storage_usage(domain_id: str) -> str:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
     if hasattr(w, "get_disk_usage"):
-        return json.dumps(w.get_disk_usage(), ensure_ascii=False, default=str)
+        return json.dumps(w.get_disk_usage(), ensure_ascii=False, default=str)  # type: ignore[reportAttributeAccessIssue]
     return _err(f"Domain '{domain_id}' is not a storage domain")
 
 
@@ -718,7 +716,7 @@ def l4_models_list(domain_id: str) -> str:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
     if hasattr(w, "list_models"):
-        return json.dumps(w.list_models(), ensure_ascii=False, default=str)
+        return json.dumps(w.list_models(), ensure_ascii=False, default=str)  # type: ignore[reportAttributeAccessIssue]
     return _err(f"Domain '{domain_id}' is not a model domain")
 
 
@@ -731,7 +729,7 @@ def l4_engine_check(domain_id: str, process_name: str = "") -> str:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
     if hasattr(w, "check_process"):
-        return json.dumps(w.check_process(process_name or None), ensure_ascii=False, default=str)
+        return json.dumps(w.check_process(process_name or None), ensure_ascii=False, default=str)  # type: ignore[reportAttributeAccessIssue]
     return _err(f"Domain '{domain_id}' is not an engine domain")
 
 
@@ -744,7 +742,7 @@ def l4_engine_logs(domain_id: str, log_file: str = "daemon.log", lines: int = 20
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
     if hasattr(w, "get_logs"):
-        return json.dumps(w.get_logs(log_file, lines), ensure_ascii=False, default=str)
+        return json.dumps(w.get_logs(log_file, lines), ensure_ascii=False, default=str)  # type: ignore[reportAttributeAccessIssue]
     return _err(f"Domain '{domain_id}' is not an engine domain")
 
 
@@ -757,7 +755,7 @@ def l4_workspace_search(domain_id: str, pattern: str) -> str:
         return _err(f"Domain '{domain_id}' not found")
     w = wrap_domain(d)
     if hasattr(w, "search_files"):
-        return json.dumps(w.search_files(pattern), ensure_ascii=False, default=str)
+        return json.dumps(w.search_files(pattern), ensure_ascii=False, default=str)  # type: ignore[reportAttributeAccessIssue]
     return _err(f"Domain '{domain_id}' is not a workspace domain")
 
 
