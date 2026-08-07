@@ -628,6 +628,24 @@ class DomainRegistry:
             },
         }
 
+    def sync_to_mcp(self) -> dict:
+        """同步已注册工具到 MCP TOOLS 格式。
+        返回 {domain_id: [{name, type, description, path}]} 供 cockpit 消费。
+        """
+        mcp_tools = {}
+        for d in self.list_all():
+            if d.tools:
+                mcp_tools[d.id] = [
+                    {
+                        "name": t.name,
+                        "type": t.tool_type,
+                        "description": t.description,
+                        "path": str(t.path),
+                    }
+                    for t in d.tools
+                ]
+        return mcp_tools
+
     def to_dict(self) -> dict:
         """序列化为 dict (用于 JSON/MCP 输出)。"""
         return {
