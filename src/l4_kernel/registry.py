@@ -23,6 +23,25 @@ DomainType = Literal["document", "config", "engine", "tool", "workspace", "stora
 
 
 @dataclass
+class ToolManifest:
+    """工具清单条目。"""
+    name: str                          # 工具文件名 (如 "controller.py")
+    path: Path                         # 绝对路径
+    tool_type: str                     # "controller" | "extractor" | "predictor" | "ocr" | "script" | "other"
+    domain_id: str                     # 所属域 ID
+    description: str = ""              # 功能描述
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "path": str(self.path),
+            "tool_type": self.tool_type,
+            "domain_id": self.domain_id,
+            "description": self.description,
+        }
+
+
+@dataclass
 class Domain:
     """L4 域元数据。"""
 
@@ -34,6 +53,7 @@ class Domain:
     kems_planes: list[str] = field(default_factory=list)  # DocumentDomain 专用
     governance_tier: int = 3  # 1=核心, 2=工作, 3=可选
     capabilities: list[str] = field(default_factory=list)
+    tools: list[ToolManifest] = field(default_factory=list)  # 工具注册表
 
     def exists(self) -> bool:
         return self.path.is_dir()
@@ -47,7 +67,8 @@ class Domain:
             "bos_uri": self.bos_uri,
             "kems_planes": self.kems_planes,
             "governance_tier": self.governance_tier,
-            "exists": self.exists(),
+            "capabilities": self.capabilities,
+            "tools": [t.to_dict() for t in self.tools],
         }
 
 
@@ -491,6 +512,85 @@ class DomainRegistry:
     def unregister(self, domain_id: str) -> bool:
         """移除一个域。返回是否成功。"""
         return self._domains.pop(domain_id, None) is not None
+
+    def register_tool(self, domain_id: str, tool: ToolManifest) -> bool:
+        d = self.get(domain_id)
+        if not d:
+            return False
+        d.tools = [t for t in d.tools if t.name != tool.name]
+        d.tools.append(tool)
+        return True
+
+    def scan_tools(self, domain_id: str) -> list[ToolManifest]:
+        d = self.get(domain_id)
+        if not d or not d.exists():
+            return []
+
+        tools: list[ToolManifest] = []
+        scan_dirs = [
+            (d.path / "_control" / "tools", ".py"),
+            (d.path / "_runtime", ".py"),
+            (d.path / "_runtime", ".sh"),
+            (d.path / "tools", ".py"),
+            (d.path / "tools", ".sh"),
+        ]
+
+        for scan_dir, suffix in scan_dirs:
+            if not scan_dir.exists():
+                continue
+            for f in sorted(scan_dir.iterdir()):
+                if f.suffix == suffix and not f.name.startswith("_"):
+                    tool_type = self._classify_tool_name(f.name)
+                    tools.append(ToolManifest(
+                        name=f.name,
+                        path=f,
+                        tool_type=tool_type,
+                        domain_id=domain_id,
+                        description=self._describe_tool(f.name, tool_type),
+                    ))
+
+        for t in tools:
+            self.register_tool(domain_id, t)
+
+        return tools
+
+    def scan_all_tools(self) -> dict[str, list[ToolManifest]]:
+        result = {}
+        for d in self.list_all():
+            tools = self.scan_tools(d.id)
+            if tools:
+                result[d.id] = tools
+        return result
+
+    @staticmethod
+    def _classify_tool_name(name: str) -> str:
+        name_lower = name.lower()
+        for keyword, tool_type in [
+            ("controller", "controller"),
+            ("extract", "extractor"),
+            ("predict", "predictor"),
+            ("ocr", "ocr"),
+            ("kems", "kems"),
+            ("dedup", "utility"),
+            ("symlink", "utility"),
+            ("index", "indexer"),
+        ]:
+            if keyword in name_lower:
+                return tool_type
+        return "other"
+
+    @staticmethod
+    def _describe_tool(name: str, tool_type: str) -> str:
+        return {
+            "controller": "域控制器",
+            "extractor": "知识提取器",
+            "predictor": "预测器",
+            "ocr": "OCR 引擎",
+            "kems": "KEMS 知识引擎",
+            "utility": "工具脚本",
+            "indexer": "索引生成器",
+            "script": "运行时脚本",
+        }.get(tool_type, "工具")
 
     # ── 健康 ────────────────────────────────────────────────────────
 
