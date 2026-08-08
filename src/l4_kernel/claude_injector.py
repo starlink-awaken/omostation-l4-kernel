@@ -288,3 +288,75 @@ def check_injection_status(registry: DomainRegistry | None = None) -> dict:
     """便捷函数: 检查所有域的注入状态。"""
     injector = ClaudeInjector(registry)
     return injector.validate_all()
+
+
+# ── P1-T7: TELOS Context Injection for Advisor Agent ─────────────
+
+
+def generate_telos_context() -> str:
+    """Generate TELOS context block from LifeOS files (P1-T7).
+
+    Reads ~/.claude/LIFEOS/USER/TELOS/*.md and produces a structured
+    summary for Advisor agent (SceneWatcher.evaluate_against_telos) consumption.
+
+    Returns: formatted TELOS context string, or empty if not found.
+    """
+    from pathlib import Path
+
+    telos_dir = Path.home() / ".claude" / "LIFEOS" / "USER" / "TELOS"
+    if not telos_dir.is_dir():
+        return ""
+
+    sections: list[str] = []
+    for tf in sorted(telos_dir.glob("*.md")):
+        try:
+            lines = tf.read_text(encoding="utf-8").strip().split("\n")
+            meaningful = [l.strip() for l in lines
+                          if l.strip() and not l.startswith("#") and not l.startswith("---")][:5]
+            if meaningful:
+                category = tf.stem.upper()
+                summary = " | ".join(meaningful)[:300]
+                sections.append(f"### {category}\n{summary}")
+        except Exception:
+            continue
+
+    if not sections:
+        return ""
+
+    return "## TELOS Context (L4 Injection)\n\n" + "\n\n".join(sections)
+
+
+def inject_telos_to_claude_md(target_path: str) -> dict:
+    """Inject TELOS context block into a target CLAUDE.md file.
+
+    Args:
+        target_path: Path to the CLAUDE.md file to inject into.
+
+    Returns: {status, injected, path}
+    """
+    from pathlib import Path
+
+    target = Path(target_path)
+    if not target.exists():
+        return {"status": "error", "reason": "target file not found"}
+
+    telos_block = generate_telos_context()
+    if not telos_block:
+        return {"status": "skipped", "reason": "no TELOS files found"}
+
+    content = target.read_text(encoding="utf-8")
+    marker = "<!-- TELOS-INJECTION -->"
+    if marker in content:
+        # Replace existing injection
+        import re
+        pattern = re.compile(
+            r"<!-- TELOS-INJECTION -->.*?<!-- /TELOS-INJECTION -->",
+            re.DOTALL,
+        )
+        content = pattern.sub(f"{marker}\n{telos_block}\n<!-- /TELOS-INJECTION -->", content)
+    else:
+        # Append new injection
+        content += f"\n\n{marker}\n{telos_block}\n<!-- /TELOS-INJECTION -->\n"
+
+    target.write_text(content, encoding="utf-8")
+    return {"status": "injected", "path": str(target), "sections": telos_block.count("###")}
