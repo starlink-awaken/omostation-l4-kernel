@@ -22,6 +22,8 @@ on:
 jobs:
   health-check:
     runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     strategy:
       matrix:
         python-version: ['3.13']
@@ -29,6 +31,20 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          path: l4-kernel
+
+      - name: Checkout bus-foundation
+        uses: actions/checkout@v4
+        with:
+          repository: starlink-awaken/omostation-bus-foundation
+          path: bus-foundation
+
+      - name: Checkout model-driven
+        uses: actions/checkout@v4
+        with:
+          repository: starlink-awaken/omostation-model-driven
+          path: model-driven
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -39,19 +55,16 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Install dependencies
-        run: |
-          cd projects/l4-kernel
-          uv sync
+        run: uv sync
+        working-directory: l4-kernel
 
       - name: Run tests
-        run: |
-          cd projects/l4-kernel
-          uv run pytest tests/ -q --tb=short
+        run: uv run pytest tests/ -q --tb=short
+        working-directory: l4-kernel
 
       - name: Run health check
-        run: |
-          cd projects/l4-kernel
-          python scripts/health_monitor.py --output json > health_report.json
+        run: uv run python scripts/health_monitor.py --output json > health_report.json
+        working-directory: l4-kernel
         continue-on-error: true
 
       - name: Upload health report
@@ -59,12 +72,11 @@ jobs:
         if: always()
         with:
           name: health-report
-          path: projects/l4-kernel/health_report.json
+          path: l4-kernel/health_report.json
           retention-days: 30
 
       - name: Check health status
         run: |
-          cd projects/l4-kernel
           if [ -f health_report.json ]; then
             python3 -c "
           import json
@@ -83,9 +95,10 @@ jobs:
               print(f'所有 {data[\"total_domains\"]} 个域健康状态正常')
           "
           fi
+        working-directory: l4-kernel
 
       - name: Send notification on failure
-        if: failure()
+        if: ${{ failure() && env.SLACK_WEBHOOK_URL != '' }}
         uses: 8398a7/action-slack@v3
         with:
           status: failure
@@ -96,5 +109,3 @@ jobs:
             Branch: ${{ github.ref }}
             Commit: ${{ github.sha }}
             Author: ${{ github.actor }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

@@ -377,11 +377,19 @@ def cmd_harness(args: list[str]) -> int:
     manifest = registry.get(args[1])
     if manifest is None:
         _json_envelope(
-            error={"code": "L4-HARNESS-003", "message": f"domain not found: {args[1]}", "path": str(registry.index_path)}
+            error={
+                "code": "L4-HARNESS-003",
+                "message": f"domain not found: {args[1]}",
+                "path": str(registry.index_path),
+            }
         )
         return 1
     raw_gates = _option(args, "--gates")
-    gates = tuple(item.strip() for item in raw_gates.split(",") if item.strip()) if raw_gates else PROFILE_GATES[manifest.archetype]
+    gates = (
+        tuple(item.strip() for item in raw_gates.split(",") if item.strip())
+        if raw_gates
+        else PROFILE_GATES[manifest.archetype]
+    )
     health = HarnessRunner().run(manifest, gates)
     _json_envelope(data=health.to_dict())
     return 0 if health.ok else 1

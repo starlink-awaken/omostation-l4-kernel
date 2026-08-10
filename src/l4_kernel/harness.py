@@ -175,11 +175,7 @@ class HarnessRunner:
             bodies = [yaml.safe_load(yaml.serialize(node)) for node in wrapped_nodes]
         else:
             bodies = [yaml.safe_load(text)]
-        return [
-            asset
-            for body in bodies
-            if (asset := self._asset_from_body(path, kind, body, issues)) is not None
-        ]
+        return [asset for body in bodies if (asset := self._asset_from_body(path, kind, body, issues)) is not None]
 
     def _load_fenced_assets(
         self,
@@ -304,9 +300,7 @@ class HarnessRunner:
         try:
             resolve_within(manifest.root, ".")
         except PathPolicyError as exc:
-            issues.append(
-                ValidationIssue(exc.code, "error", exc.message, manifest.root, gate="T7")
-            )
+            issues.append(ValidationIssue(exc.code, "error", exc.message, manifest.root, gate="T7"))
         if not manifest.space_ref:
             issues.append(HarnessRunner._policy_issue(manifest, "space_ref is required"))
         if not manifest.principal_ref:

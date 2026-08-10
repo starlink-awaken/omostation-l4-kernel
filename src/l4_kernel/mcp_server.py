@@ -169,7 +169,9 @@ def l4_harness_run(domain_id: str, gates: str = "", registry_path: str = "") -> 
             },
             ensure_ascii=False,
         )
-    selected = tuple(item.strip() for item in gates.split(",") if item.strip()) if gates else PROFILE_GATES[manifest.archetype]
+    selected = (
+        tuple(item.strip() for item in gates.split(",") if item.strip()) if gates else PROFILE_GATES[manifest.archetype]
+    )
     health = HarnessRunner().run(manifest, selected)
     return json.dumps({"ok": health.ok, "data": health.to_dict()}, ensure_ascii=False, default=str)
 

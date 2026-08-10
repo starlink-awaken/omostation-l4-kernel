@@ -10,18 +10,34 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout l4-kernel
+        uses: actions/checkout@v4
+        with:
+          path: l4-kernel
+      - name: Checkout bus-foundation
+        uses: actions/checkout@v4
+        with:
+          repository: starlink-awaken/omostation-bus-foundation
+          path: bus-foundation
+      - name: Checkout model-driven
+        uses: actions/checkout@v4
+        with:
+          repository: starlink-awaken/omostation-model-driven
+          path: model-driven
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "uv.lock"
+          cache-dependency-glob: "l4-kernel/uv.lock"
           python-version: "3.13"
       - name: Install dependencies
         run: uv sync
+        working-directory: l4-kernel
       - name: Ruff check
         run: uv run ruff check src/
+        working-directory: l4-kernel
       - name: Ruff format check
         run: uv run ruff format src/ --check
+        working-directory: l4-kernel
 
   test:
     # 2026-07-02: 加 macOS 矩阵 — test_check_process(launchd) 仅 darwin 运行(已加 skipif),
@@ -31,13 +47,28 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout l4-kernel
+        uses: actions/checkout@v4
+        with:
+          path: l4-kernel
+      - name: Checkout bus-foundation
+        uses: actions/checkout@v4
+        with:
+          repository: starlink-awaken/omostation-bus-foundation
+          path: bus-foundation
+      - name: Checkout model-driven
+        uses: actions/checkout@v4
+        with:
+          repository: starlink-awaken/omostation-model-driven
+          path: model-driven
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "uv.lock"
+          cache-dependency-glob: "l4-kernel/uv.lock"
           python-version: "3.13"
       - name: Install dependencies
         run: uv sync
+        working-directory: l4-kernel
       - name: Run tests
         run: uv run pytest tests/ -q --tb=short
+        working-directory: l4-kernel

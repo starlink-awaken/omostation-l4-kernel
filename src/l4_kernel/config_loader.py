@@ -36,9 +36,7 @@ def resolve_registry_path(explicit: Path | None = None) -> Path:
     env_value = os.environ.get("L4_DOMAIN_REGISTRY")
     if env_value:
         return Path(env_value).expanduser().resolve()
-    raise FileNotFoundError(
-        "L4 domain registry not configured; pass --registry or set L4_DOMAIN_REGISTRY"
-    )
+    raise FileNotFoundError("L4 domain registry not configured; pass --registry or set L4_DOMAIN_REGISTRY")
 
 
 def load_overrides_from_config(config_path: Path) -> dict[str, Path]:

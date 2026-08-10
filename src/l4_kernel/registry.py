@@ -26,11 +26,12 @@ DomainType = Literal["document", "config", "engine", "tool", "workspace", "stora
 @dataclass
 class ToolManifest:
     """工具清单条目。"""
-    name: str                          # 工具文件名 (如 "controller.py")
-    path: Path                         # 绝对路径
-    tool_type: str                     # "controller" | "extractor" | "predictor" | "ocr" | "script" | "other"
-    domain_id: str                     # 所属域 ID
-    description: str = ""              # 功能描述
+
+    name: str  # 工具文件名 (如 "controller.py")
+    path: Path  # 绝对路径
+    tool_type: str  # "controller" | "extractor" | "predictor" | "ocr" | "script" | "other"
+    domain_id: str  # 所属域 ID
+    description: str = ""  # 功能描述
 
     def to_dict(self) -> dict:
         return {
@@ -551,13 +552,15 @@ class DomainRegistry:
             for f in sorted(scan_dir.iterdir()):
                 if f.suffix == suffix and not f.name.startswith("_"):
                     tool_type = self._classify_tool_name(f.name)
-                    tools.append(ToolManifest(
-                        name=f.name,
-                        path=f,
-                        tool_type=tool_type,
-                        domain_id=domain_id,
-                        description=self._describe_tool(f.name, tool_type),
-                    ))
+                    tools.append(
+                        ToolManifest(
+                            name=f.name,
+                            path=f,
+                            tool_type=tool_type,
+                            domain_id=domain_id,
+                            description=self._describe_tool(f.name, tool_type),
+                        )
+                    )
 
         for t in tools:
             self.register_tool(domain_id, t)
