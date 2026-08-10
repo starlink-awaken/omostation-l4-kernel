@@ -31,20 +31,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          path: l4-kernel
-
-      - name: Checkout bus-foundation
-        uses: actions/checkout@v4
-        with:
-          repository: starlink-awaken/omostation-bus-foundation
-          path: bus-foundation
-
-      - name: Checkout model-driven
-        uses: actions/checkout@v4
-        with:
-          repository: starlink-awaken/omostation-model-driven
-          path: model-driven
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -55,16 +41,19 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Install dependencies
-        run: uv sync
-        working-directory: l4-kernel
+        # Private bridge repositories are intentionally absent here. Core mode
+        # exercises the documented ImportError fallback; monorepo gates cover
+        # the fully integrated topology.
+        run: |
+          uv venv --python ${{ matrix.python-version }}
+          uv pip install "pyyaml>=6.0.3" "fastmcp>=3.4.2" "pytest>=9.0.3" "ruff>=0.8"
+          uv pip install --no-deps -e .
 
       - name: Run tests
-        run: uv run pytest tests/ -q --tb=short
-        working-directory: l4-kernel
+        run: uv run --no-sync pytest tests/ -q --tb=short
 
       - name: Run health check
-        run: uv run python scripts/health_monitor.py --output json > health_report.json
-        working-directory: l4-kernel
+        run: uv run --no-sync python scripts/health_monitor.py --output json > health_report.json
         continue-on-error: true
 
       - name: Upload health report
@@ -72,7 +61,7 @@ jobs:
         if: always()
         with:
           name: health-report
-          path: l4-kernel/health_report.json
+          path: health_report.json
           retention-days: 30
 
       - name: Check health status
@@ -95,8 +84,6 @@ jobs:
               print(f'所有 {data[\"total_domains\"]} 个域健康状态正常')
           "
           fi
-        working-directory: l4-kernel
-
       - name: Send notification on failure
         if: ${{ failure() && env.SLACK_WEBHOOK_URL != '' }}
         uses: 8398a7/action-slack@v3
