@@ -2,12 +2,16 @@
 
 project: l4-kernel
 layer: L4
-description: 自我层管理面 — 27域统一注册 + KEMS六面操作 + 健康聚合
+description: L4 知识主权只读契约编译与 Harness；旧 KEMS 管理面仅作兼容视图
 
 cli:
   - name: l4-kernel
     module: l4_kernel.cli:main
-    description: L4 域管理 CLI (domain/kems/cards/health)
+    description: L4 契约 CLI (contract/registry/harness；domain/skill/workflow 为 legacy)
+    commands:
+      - l4-kernel contract validate PATH --json
+      - l4-kernel registry list --registry PATH --json
+      - l4-kernel harness run DOMAIN_ID --gates T0,T1,T2,T4,T7 --json
 
 mcp:
   - port: 7456
@@ -17,6 +21,9 @@ mcp:
     description: L4 自我层 MCP SSE 端点(给上层 Agent 跨域信号总线访问)
     owner: l4-kernel
     enforcement: env-only   # 默认 7456 但生产用 L4_KERNEL_MCP_PORT env 覆盖
+    readonly_phase0_tools:
+      - l4_contract_validate
+      - l4_harness_run
 
 http: []
 
@@ -24,4 +31,19 @@ dependencies:
   runtime: [pyyaml]
   dev: [pytest, ruff]
 
-tests: 16  # tests/ 目录下 16 个测试文件，数量随开发变化，以 CI 为准
+environment:
+  required:
+    L4_DOMAIN_REGISTRY: DomainRegistry YAML 的显式路径
+  legacy:
+    L4_REGISTRY_MODE: 仅值 legacy 启用内置注册表回滚视图
+    L4_LEGACY_DIRECT_WRITE: 仅值 "1" 启用受 containment 约束的旧直接写
+
+exit_codes:
+  0: valid
+  1: validation_failure
+  2: configuration_failure
+
+phase0_exclusions:
+  - ContextPack（Phase 1）
+
+tests: dynamic  # 以 CI 收集结果为准，禁止手工维护固定数量

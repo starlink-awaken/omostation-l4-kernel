@@ -1,0 +1,4 @@
+workflow:
+  id: test/dangling-action
+  steps:
+    - action: definitely_not_registered

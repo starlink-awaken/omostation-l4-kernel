@@ -14,6 +14,7 @@ P52 治本: Domain.path 来源 (3 层优先级)
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
@@ -69,6 +70,7 @@ class Domain:
             "governance_tier": self.governance_tier,
             "capabilities": self.capabilities,
             "tools": [t.to_dict() for t in self.tools],
+            "exists": self.exists(),
         }
 
 
@@ -459,6 +461,14 @@ class DomainRegistry:
                 raise ValueError(f"Domain {d.id!r} missing from path_overrides. Required keys: {sorted(builtin_ids)}")
             d = replace(d, path=path_overrides[d.id])
             self._domains[d.id] = d
+
+    @classmethod
+    def from_domains(cls, domains: Iterable[Domain]) -> DomainRegistry:
+        """Build a registry from already validated domains without builtin expansion."""
+
+        instance = cls.__new__(cls)
+        instance._domains = {domain.id: domain for domain in domains}
+        return instance
 
     @staticmethod
     def require_explicit() -> DomainRegistry:
