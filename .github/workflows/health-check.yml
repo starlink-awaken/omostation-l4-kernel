@@ -63,7 +63,7 @@ jobs:
           from l4_kernel.templates import init_domain_kems
           from l4_kernel.testing import default_overrides
 
-          fixture_root = Path(".ci-health")
+          fixture_root = Path(".ci-health").resolve()
           overrides = default_overrides(fixture_root)
           now = datetime.now(UTC).isoformat()
           for domain in _BUILTIN_DOMAINS:
