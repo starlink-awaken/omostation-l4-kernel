@@ -30,7 +30,7 @@ def _assert_standalone_checkout(job: dict) -> None:
 def _assert_core_mode(job: dict) -> None:
     install = next(step for step in job["steps"] if step.get("name") == "Install dependencies")
     command = install["run"]
-    assert "uv venv" in command
+    assert "uv venv --clear" in command
     assert "uv pip install --no-deps -e ." in command
 
     commands = "\n".join(step["run"] for step in job["steps"] if "run" in step)
@@ -63,6 +63,13 @@ def test_health_workflow_uses_standalone_paths_and_optional_slack() -> None:
     _assert_standalone_checkout(job)
     _assert_core_mode(job)
     assert job["env"]["SLACK_WEBHOOK_URL"]
+
+    fixture = next(step for step in job["steps"] if step.get("name") == "Prepare health fixture")
+    assert "default_overrides" in fixture["run"]
+    assert "init_domain_kems" in fixture["run"]
+
+    health_check = next(step for step in job["steps"] if step.get("name") == "Run health check")
+    assert not health_check.get("continue-on-error", False)
 
     notification = next(step for step in job["steps"] if step["name"] == "Send notification on failure")
     assert "env.SLACK_WEBHOOK_URL != ''" in notification["if"]

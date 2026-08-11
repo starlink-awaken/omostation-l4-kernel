@@ -45,16 +45,43 @@ jobs:
         # exercises the documented ImportError fallback; monorepo gates cover
         # the fully integrated topology.
         run: |
-          uv venv --python ${{ matrix.python-version }}
+          uv venv --clear --python ${{ matrix.python-version }}
           uv pip install "pyyaml>=6.0.3" "fastmcp>=3.4.2" "pytest>=9.0.3" "ruff>=0.8"
           uv pip install --no-deps -e .
 
       - name: Run tests
         run: uv run --no-sync pytest tests/ -q --tb=short
 
+      - name: Prepare health fixture
+        run: |
+          uv run --no-sync python - <<'PY'
+          from datetime import UTC, datetime
+          from pathlib import Path
+
+          from l4_kernel.kems import KemsPlane
+          from l4_kernel.registry import _BUILTIN_DOMAINS
+          from l4_kernel.templates import init_domain_kems
+          from l4_kernel.testing import default_overrides
+
+          fixture_root = Path(".ci-health")
+          overrides = default_overrides(fixture_root)
+          now = datetime.now(UTC).isoformat()
+          for domain in _BUILTIN_DOMAINS:
+              if domain.domain_type != "document":
+                  continue
+              domain_root = overrides[domain.id]
+              init_domain_kems(domain_root, domain_name=domain.name, owner="ci")
+              KemsPlane(domain_root).append_signal(
+                  {"ts": now, "type": "✅", "source": "ci.health-fixture", "message": "fixture ready"}
+              )
+
+          lines = ["[domain_paths]"]
+          lines.extend(f'{domain_id} = "{domain_path}"' for domain_id, domain_path in overrides.items())
+          Path("l4_domain_paths.toml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
       - name: Run health check
         run: uv run --no-sync python scripts/health_monitor.py --output json > health_report.json
-        continue-on-error: true
 
       - name: Upload health report
         uses: actions/upload-artifact@v4

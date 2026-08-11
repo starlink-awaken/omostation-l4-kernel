@@ -22,7 +22,7 @@ jobs:
         # CI verifies the kernel's optional-bridge fallback without cross-repo
         # credentials; the Documents root gate covers integrated execution.
         run: |
-          uv venv --python 3.13
+          uv venv --clear --python 3.13
           uv pip install "pyyaml>=6.0.3" "fastmcp>=3.4.2" "pytest>=9.0.3" "ruff>=0.8"
           uv pip install --no-deps -e .
       - name: Ruff check
@@ -47,7 +47,7 @@ jobs:
           python-version: "3.13"
       - name: Install dependencies
         run: |
-          uv venv --python 3.13
+          uv venv --clear --python 3.13
           uv pip install "pyyaml>=6.0.3" "fastmcp>=3.4.2" "pytest>=9.0.3" "ruff>=0.8"
           uv pip install --no-deps -e .
       - name: Run tests
