@@ -8,6 +8,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from l4_kernel.path_policy import legacy_execution_denied
+
+
+def _denied_action(domain_type: str, action: str) -> dict:
+    return {"action": action, **legacy_execution_denied(f"{domain_type}.{action}")}
+
+
+def _denied_mechanism(domain_type: str, mechanism: str) -> dict:
+    return {"mechanism": mechanism, **legacy_execution_denied(f"{domain_type}.{mechanism}")}
+
+
 # ═════════════════════════════════════════════════════════════════════
 # ConfigDomainPlugin — 配置域操作
 # ═════════════════════════════════════════════════════════════════════
@@ -86,23 +97,10 @@ class ConfigDomainPlugin:
         }
 
     def _action_config_diff(self, domain_path: Path) -> dict:
-        return {"action": "config_diff", "status": "ok"}
+        return _denied_action(self.domain_type, "config_diff")
 
     def _action_config_backup(self, domain_path: Path) -> dict:
-        archive = domain_path / "_archive"
-        archive.mkdir(parents=True, exist_ok=True)
-        count = 0
-        for f in list(domain_path.rglob("*")):
-            if f.is_file() and f.suffix in (".yaml", ".yml", ".json") and not f.name.startswith("."):
-                # Skip files already in _archive to avoid recursive backup
-                if "_archive" in f.parts:
-                    continue
-                import shutil
-
-                dest = archive / f.name
-                shutil.copy2(f, dest)
-                count += 1
-        return {"action": "config_backup", "backed_up": count, "archive": str(archive)}
+        return _denied_action(self.domain_type, "config_backup")
 
     def _action_config_validate_all(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import ConfigDomain
@@ -121,7 +119,7 @@ class ConfigDomainPlugin:
         return {"action": "config_validate_all", "results": results}
 
     def _mechanism_config_auto_backup(self, domain_path: Path) -> dict:
-        return self._action_config_backup(domain_path)
+        return _denied_mechanism(self.domain_type, "config_auto_backup")
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -252,7 +250,7 @@ class ToolDomainPlugin:
         }
 
     def _action_tool_sync_ecos_link(self, domain_path: Path) -> dict:
-        return {"action": "tool_sync_ecos_link", "status": "ok", "note": "ecos-link sync pending"}
+        return _denied_action(self.domain_type, "tool_sync_ecos_link")
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -328,17 +326,10 @@ class EngineDomainPlugin:
         }
 
     def _action_engine_restart(self, domain_path: Path) -> dict:
-        return {"action": "engine_restart", "status": "not_implemented", "note": "restart requires daemon support"}
+        return _denied_action(self.domain_type, "engine_restart")
 
     def _action_engine_config_rotate(self, domain_path: Path) -> dict:
-        config_file = domain_path / "config.yaml"
-        if not config_file.exists():
-            return {"action": "engine_config_rotate", "status": "no_config"}
-        import shutil
-
-        backup = domain_path / "config.yaml.bak"
-        shutil.copy2(config_file, backup)
-        return {"action": "engine_config_rotate", "status": "ok", "backup": str(backup)}
+        return _denied_action(self.domain_type, "engine_config_rotate")
 
     def _action_engine_log_analyze(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import EngineDomain
@@ -432,7 +423,7 @@ class StorageDomainPlugin:
         return {"action": "disk_monitor", "status": status, "usage": usage}
 
     def _action_cleanup_stale(self, domain_path: Path) -> dict:
-        return {"action": "cleanup_stale", "status": "not_implemented", "note": "requires file age scanning"}
+        return _denied_action(self.domain_type, "cleanup_stale")
 
     def _action_mount_check(self, domain_path: Path) -> dict:
         from l4_kernel.domain_types import StorageDomain
@@ -534,7 +525,7 @@ class ModelDomainPlugin:
         return {"action": "checksum_verify", "verified": len(results)}
 
     def _action_model_cleanup(self, domain_path: Path) -> dict:
-        return {"action": "model_cleanup", "status": "not_implemented", "note": "manual review required"}
+        return _denied_action(self.domain_type, "model_cleanup")
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -605,7 +596,7 @@ class WorkspaceDomainPlugin:
         }
 
     def _action_file_search(self, domain_path: Path) -> dict:
-        return {"action": "file_search", "status": "ok", "note": "use l4_workspace_search MCP tool"}
+        return _denied_action(self.domain_type, "file_search")
 
     def _action_stale_project_detect(self, domain_path: Path) -> dict:
-        return {"action": "stale_project_detect", "status": "ok", "note": "requires git log scanning"}
+        return _denied_action(self.domain_type, "stale_project_detect")

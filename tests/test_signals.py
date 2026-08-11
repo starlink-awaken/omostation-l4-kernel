@@ -105,7 +105,14 @@ class TestSignalBus:
             assert "level" in p
             assert "message" in p
 
-    def test_emit_violation_signal(self, registry):
+    def test_emit_violation_signal(self, registry, monkeypatch):
+        registered_debts = []
+
+        class FakeDebtBridge:
+            def register_debt_and_persist(self, **payload):
+                registered_debts.append(payload)
+
+        monkeypatch.setattr("l4_kernel.signals._MD_BRIDGE", FakeDebtBridge())
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             init_domain_kems(root, domain_name="测试", owner="test")
@@ -136,6 +143,13 @@ class TestSignalBus:
             last_sig = signals[-1]
             assert last_sig["type"] == "🔴"
             assert "missing" in last_sig["message"]
+            assert registered_debts == [
+                {
+                    "title": "Schema violation: viol-test",
+                    "description": "missing file",
+                    "severity": "high",
+                }
+            ]
 
     def test_emit_violation_signal_no_errors(self, registry):
         with tempfile.TemporaryDirectory() as td:

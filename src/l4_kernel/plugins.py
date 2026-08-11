@@ -30,6 +30,8 @@ from pathlib import Path
 
 from typing import Protocol
 
+from l4_kernel.path_policy import legacy_execution_denied
+
 # ═════════════════════════════════════════════════════════════════════
 # 插件接口
 # ═════════════════════════════════════════════════════════════════════
@@ -180,34 +182,38 @@ class DocumentKemsPlugin:
         }
 
     def _action_knowledge_index(self, domain_path: Path) -> dict:
-        return {"action": "knowledge_index", "status": "ok"}
+        return self._denied_action("knowledge_index")
 
     def _action_knowledge_search(self, domain_path: Path) -> dict:
-        return {"action": "knowledge_search", "status": "ok"}
+        return self._denied_action("knowledge_search")
 
     def _action_knowledge_categorize(self, domain_path: Path) -> dict:
-        return {"action": "knowledge_categorize", "status": "ok"}
+        return self._denied_action("knowledge_categorize")
 
     def _action_entity_register(self, domain_path: Path) -> dict:
-        return {"action": "entity_register", "status": "ok"}
+        return self._denied_action("entity_register")
 
     def _action_entity_review(self, domain_path: Path) -> dict:
-        return {"action": "entity_review", "status": "ok"}
+        return self._denied_action("entity_review")
 
     def _action_entity_update(self, domain_path: Path) -> dict:
-        return {"action": "entity_update", "status": "ok"}
+        return self._denied_action("entity_update")
 
     def _action_storage_archive(self, domain_path: Path) -> dict:
-        return {"action": "storage_archive", "status": "ok"}
+        return self._denied_action("storage_archive")
 
     def _action_storage_cleanup(self, domain_path: Path) -> dict:
-        return {"action": "storage_cleanup", "status": "ok"}
+        return self._denied_action("storage_cleanup")
 
     def _action_cross_domain_sync(self, domain_path: Path) -> dict:
-        return {"action": "cross_domain_sync", "status": "ok"}
+        return self._denied_action("cross_domain_sync")
 
     def _action_cross_domain_notify(self, domain_path: Path) -> dict:
-        return {"action": "cross_domain_notify", "status": "ok"}
+        return self._denied_action("cross_domain_notify")
+
+    @staticmethod
+    def _denied_action(action: str) -> dict:
+        return {"action": action, **legacy_execution_denied(f"document.{action}")}
 
     # ── KEMS 流程模板 ───────────────────────────────────────────────
 
@@ -321,7 +327,10 @@ class DocumentKemsPlugin:
         }
 
     def _mechanism_freshness_auto_alert(self, domain_path: Path) -> dict:
-        return {"mechanism": "freshness_auto_alert", "status": "ok"}
+        return {
+            "mechanism": "freshness_auto_alert",
+            **legacy_execution_denied("document.freshness_auto_alert"),
+        }
 
     def _mechanism_status_auto_evaluate(
         self, domain_path: Path, warn_threshold: int = 3, crit_threshold: int = 3

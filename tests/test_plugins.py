@@ -1,5 +1,7 @@
 """Tests for L4 Kernel Plugin System."""
 
+import pytest
+
 from l4_kernel.plugins import DocumentKemsPlugin, get_plugin_registry
 
 
@@ -65,6 +67,37 @@ class TestDocumentKemsPlugin:
         (control / "STATUS.md").write_text("---\nstatus: STABLE\n---\n")
         result = plugin._action_status_evaluate(tmp_path)
         assert result["suggested"] == "ALERT"
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "knowledge_index",
+            "knowledge_search",
+            "knowledge_categorize",
+            "entity_register",
+            "entity_review",
+            "entity_update",
+            "storage_archive",
+            "storage_cleanup",
+            "cross_domain_sync",
+            "cross_domain_notify",
+        ],
+    )
+    def test_functional_legacy_actions_fail_closed(self, name, tmp_path):
+        result = DocumentKemsPlugin().get_actions()[name](tmp_path)
+
+        assert result["action"] == name
+        assert result["status"] == "deprecated"
+        assert result["ok"] is False
+        assert result["error"]["code"] == "L4-EXECUTION-012"
+        assert result["error"]["authority"] == "omo"
+
+    def test_placeholder_mechanism_fails_closed(self, tmp_path):
+        result = DocumentKemsPlugin().get_mechanisms()["freshness_auto_alert"](tmp_path)
+
+        assert result["mechanism"] == "freshness_auto_alert"
+        assert result["status"] == "deprecated"
+        assert result["error"]["code"] == "L4-EXECUTION-012"
 
 
 class TestPluginRegistry:

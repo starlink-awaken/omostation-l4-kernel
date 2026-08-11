@@ -35,8 +35,8 @@ def make_manifest(root: Path, *, archetype: str = "operational") -> DomainManife
 
 
 def test_profiles_select_deterministic_gates() -> None:
-    assert GATES == ("T0", "T1", "T2", "T4", "T7")
-    assert PROFILE_GATES["private-core"] == GATES
+    assert GATES == ("T0", "T1", "T2", "T4", "T7", "T8")
+    assert PROFILE_GATES["private-core"] == ("T0", "T1", "T2", "T4", "T7")
     assert PROFILE_GATES["library"] == ("T0", "T1", "T2", "T7")
 
 
@@ -154,3 +154,32 @@ def test_same_input_produces_same_issues(tmp_path: Path) -> None:
 
     assert first.issues == second.issues
     assert first.to_dict()["issues"] == second.to_dict()["issues"]
+
+
+def test_t8_reports_content_plane_violation(tmp_path: Path) -> None:
+    (tmp_path / "run.py").write_text("print('x')", encoding="utf-8")
+
+    health = HarnessRunner().run(make_manifest(tmp_path), ("T8",))
+
+    assert health.ok is False
+    assert health.issues[0].code == "L4-CONTENT-008"
+    assert health.issues[0].gate == "T8"
+
+
+def test_t8_reports_projection_as_advisory(tmp_path: Path) -> None:
+    (tmp_path / "STATE.md").write_text("# generated state", encoding="utf-8")
+
+    health = HarnessRunner().run(make_manifest(tmp_path), ("T8",))
+
+    assert health.ok is True
+    assert health.issues[0].code == "L4-CONTENT-010"
+    assert health.issues[0].severity == "warning"
+
+
+def test_t8_reports_missing_root_without_raising(tmp_path: Path) -> None:
+    missing = tmp_path / "missing"
+
+    health = HarnessRunner().run(make_manifest(missing), ("T0", "T8"))
+
+    assert health.ok is False
+    assert any(issue.code == "L4-ROOT-000" and issue.gate == "T8" for issue in health.issues)
