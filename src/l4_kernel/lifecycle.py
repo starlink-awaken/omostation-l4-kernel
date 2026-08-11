@@ -137,7 +137,11 @@ class DomainLifecycle:
                     "recovery": error.recovery,
                 }
             except (ContractError, OSError, ValueError) as error:
-                return {"status": "error", "message": f"Domain '{domain_id}' creation refused: {error}", "created_files": []}
+                return {
+                    "status": "error",
+                    "message": f"Domain '{domain_id}' creation refused: {error}",
+                    "created_files": [],
+                }
 
         # 注册
         self.registry.register(domain)
@@ -222,9 +226,13 @@ class DomainLifecycle:
             try:
                 manifest = load_domain_manifest(manifest_path)
                 if manifest.id != domain.id or manifest.root != domain.path.resolve():
-                    raise ContractError("L4-CONTRACT-001", "DOMAIN.yaml does not match registry identity", manifest_path)
+                    raise ContractError(
+                        "L4-CONTRACT-001", "DOMAIN.yaml does not match registry identity", manifest_path
+                    )
                 if manifest.display_name != domain.name:
-                    raise ContractError("L4-CONTRACT-001", "DOMAIN.yaml display_name does not match registry name", manifest_path)
+                    raise ContractError(
+                        "L4-CONTRACT-001", "DOMAIN.yaml display_name does not match registry name", manifest_path
+                    )
                 result["checks"]["domain_manifest"] = "valid"
             except ContractError as error:
                 result["status"] = "error"
@@ -300,7 +308,9 @@ class DomainLifecycle:
     def migrate(self, domain_id: str, to_version: str = "v5") -> dict:
         """迁移域至 declarative content contracts, preserving the legacy envelope."""
         if to_version != "v5":
-            return self._migration_error(domain_id, f"unsupported migration target version: {to_version}; supported: v5")
+            return self._migration_error(
+                domain_id, f"unsupported migration target version: {to_version}; supported: v5"
+            )
 
         domain = self.registry.get(domain_id)
         if not domain or domain.domain_type != "document":
@@ -337,7 +347,10 @@ class DomainLifecycle:
                 )
             except (ContractError, OSError, ValueError) as error:
                 return self._migration_error(domain_id, str(error))
-            changes = [f"created content contract: {path.relative_to(domain.path.resolve()).as_posix()}" for path in created_files]
+            changes = [
+                f"created content contract: {path.relative_to(domain.path.resolve()).as_posix()}"
+                for path in created_files
+            ]
 
         return {
             "status": "ok",

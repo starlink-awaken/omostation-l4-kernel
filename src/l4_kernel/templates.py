@@ -586,7 +586,9 @@ def _secure_call(operation: str, function: Any, /, *args: Any, **kwargs: Any) ->
 def _require_secure_publication_platform() -> None:
     required_flags = ("O_NOFOLLOW", "O_DIRECTORY", "O_EXCL")
     required_functions = ("open", "mkdir", "stat", "fsync", "fstat", "fchmod", "read", "write")
-    if any(not hasattr(os, flag) for flag in required_flags) or any(not hasattr(os, name) for name in required_functions):
+    if any(not hasattr(os, flag) for flag in required_flags) or any(
+        not hasattr(os, name) for name in required_functions
+    ):
         raise _unsupported_platform("required flags or filesystem functions")
 
     supports_dir_fd = getattr(os, "supports_dir_fd", set())
@@ -624,7 +626,9 @@ def _record_created_file(journal: _BootstrapJournal, fd: int, path: Path, payloa
         journal.record_uncertain_file(path)
         journal.record_file_durability_uncertain(path)
         raise OSError(errno.EIO, f"created file changed before ownership could be recorded: {path}")
-    journal.file_entries.append(_JournalEntry(path, info.st_dev, info.st_ino, len(payload), hashlib.sha256(payload).hexdigest()))
+    journal.file_entries.append(
+        _JournalEntry(path, info.st_dev, info.st_ino, len(payload), hashlib.sha256(payload).hexdigest())
+    )
 
 
 def _after_directory_creation(path: Path) -> None:
@@ -956,9 +960,15 @@ def init_domain_content_contracts(
     files: dict[Path, str] = {
         root / "DOMAIN.yaml": yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False),
         root / "Method.md": f"# Method — {domain_name}\n\n{domain_purpose}\n",
-        root / "profiles" / "Profile.md": f"# Profile — {domain_name}\n\n- Owner: {owner}\n- Type: {domain_type_desc}\n",
-        root / "ontology" / "DOMAIN_ONTOLOGY.md": f"# Domain ontology — {domain_name}\n\n- Scope: {ssot_scope}\n- Key files: {key_files}\n",
-        root / "rubrics" / "QUALITY_RUBRIC.md": f"# Quality rubric — {domain_name}\n\n- Content remains declarative and canonical.\n",
+        root
+        / "profiles"
+        / "Profile.md": f"# Profile — {domain_name}\n\n- Owner: {owner}\n- Type: {domain_type_desc}\n",
+        root
+        / "ontology"
+        / "DOMAIN_ONTOLOGY.md": f"# Domain ontology — {domain_name}\n\n- Scope: {ssot_scope}\n- Key files: {key_files}\n",
+        root
+        / "rubrics"
+        / "QUALITY_RUBRIC.md": f"# Quality rubric — {domain_name}\n\n- Content remains declarative and canonical.\n",
     }
     payloads = {path: content.encode("utf-8") for path, content in files.items()}
     journal = _BootstrapJournal(root)
@@ -1016,9 +1026,7 @@ def init_domain_kems(
         init_domain_content_contracts(
             domain_path,
             domain_id=(
-                domain_id
-                if domain_id is not None
-                else Path(domain_path).expanduser().resolve(strict=False).name
+                domain_id if domain_id is not None else Path(domain_path).expanduser().resolve(strict=False).name
             ),
             domain_name=domain_name,
             owner=owner,

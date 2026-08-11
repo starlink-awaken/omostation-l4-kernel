@@ -102,7 +102,9 @@ class ContentPlaneReport:
 
     @property
     def violations(self) -> tuple[ArtifactClassification, ...]:
-        return tuple(item for item in self.artifacts if item.kind in {"runtime", "cache", "invalid_archive"} or item.issue_code)
+        return tuple(
+            item for item in self.artifacts if item.kind in {"runtime", "cache", "invalid_archive"} or item.issue_code
+        )
 
     @property
     def ok(self) -> bool:
@@ -249,8 +251,7 @@ def audit_content_plane(root: Path) -> ContentPlaneReport:
             stability_failures[entry.path] = _invalid_node(entry.path, entry.relative_path, str(error))
     resolver = ContentArchiveResolver(root_absolute)
     artifacts = [
-        stability_failures.get(entry.path)
-        or classify_artifact(root_absolute, entry.path, archive_resolver=resolver)
+        stability_failures.get(entry.path) or classify_artifact(root_absolute, entry.path, archive_resolver=resolver)
         for entry in first.entries
         if _auditable_file(entry.path)
     ]

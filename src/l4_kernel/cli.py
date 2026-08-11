@@ -427,7 +427,11 @@ def cmd_domain_init_content_contracts(args: list[str]) -> int:
         value = args[index + 1]
         if value.startswith("--") or not value.strip():
             _json_envelope(
-                error={"code": "L4-CONFIG-002", "message": f"{option} must be provided once and be non-empty", "path": str(root)}
+                error={
+                    "code": "L4-CONFIG-002",
+                    "message": f"{option} must be provided once and be non-empty",
+                    "path": str(root),
+                }
             )
             return 2
         options[option] = value
@@ -478,7 +482,11 @@ def main() -> int:
     """l4-kernel CLI 入口。"""
     args = sys.argv[1:]
 
-    if args and args[0] in {"domain", "skill", "workflow", "consistency", "health"} and args[1:2] != ["init-content-contracts"]:
+    if (
+        args
+        and args[0] in {"domain", "skill", "workflow", "consistency", "health"}
+        and args[1:2] != ["init-content-contracts"]
+    ):
         print("⚠️ 该 L4 legacy 命令已弃用，请迁移到 contract/registry/harness 或 cockpit", file=sys.stderr)
 
     if not args or args[0] in ("--help", "-h"):

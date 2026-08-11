@@ -354,16 +354,31 @@ def _validate_mapping(root: Path, archive_root: Path, manifest: Path) -> None:
     _timestamp(raw["captured_at"], "captured_at")
 
     inventory = raw["inventory"]
-    if not isinstance(inventory, dict) or any(not isinstance(key, str) for key in inventory) or set(inventory) != _INVENTORY_FIELDS:
+    if (
+        not isinstance(inventory, dict)
+        or any(not isinstance(key, str) for key in inventory)
+        or set(inventory) != _INVENTORY_FIELDS
+    ):
         raise ContentArchiveValidationError("inventory must contain files, bytes, and tree_sha256")
-    if any(not isinstance(inventory[field], int) or isinstance(inventory[field], bool) or inventory[field] < 0 for field in ("files", "bytes")):
+    if any(
+        not isinstance(inventory[field], int) or isinstance(inventory[field], bool) or inventory[field] < 0
+        for field in ("files", "bytes")
+    ):
         raise ContentArchiveValidationError("inventory files and bytes must be non-negative integers")
     fingerprint = inventory["tree_sha256"]
-    if not isinstance(fingerprint, str) or len(fingerprint) != 64 or any(char not in "0123456789abcdef" for char in fingerprint):
+    if (
+        not isinstance(fingerprint, str)
+        or len(fingerprint) != 64
+        or any(char not in "0123456789abcdef" for char in fingerprint)
+    ):
         raise ContentArchiveValidationError("inventory tree_sha256 must be a lowercase SHA-256 digest")
 
     evidence = raw["consumer_evidence"]
-    if not isinstance(evidence, dict) or any(not isinstance(key, str) for key in evidence) or set(evidence) != _CONSUMER_EVIDENCE_FIELDS:
+    if (
+        not isinstance(evidence, dict)
+        or any(not isinstance(key, str) for key in evidence)
+        or set(evidence) != _CONSUMER_EVIDENCE_FIELDS
+    ):
         raise ContentArchiveValidationError("consumer_evidence must contain scanned_at and active_consumers")
     _timestamp(evidence["scanned_at"], "consumer_evidence.scanned_at")
     if not isinstance(evidence["active_consumers"], list) or evidence["active_consumers"]:
