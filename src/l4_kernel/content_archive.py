@@ -137,7 +137,7 @@ def _validate_mapping(root: Path, archive_root: Path, manifest: Path) -> None:
         raise ContentArchiveValidationError("cannot inspect CONTENT_ARCHIVE.yaml") from error
     try:
         raw = yaml.safe_load(manifest.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as error:
+    except (OSError, UnicodeError, yaml.YAMLError) as error:
         raise ContentArchiveValidationError(f"invalid CONTENT_ARCHIVE.yaml: {error}") from error
     if not isinstance(raw, dict):
         raise ContentArchiveValidationError("CONTENT_ARCHIVE.yaml must be a mapping")

@@ -46,6 +46,7 @@ def test_cache_keeps_priority_over_valid_content_archive(tmp_path: Path) -> None
     cache = archive / "nested" / "state.sqlite"
     cache.parent.mkdir(parents=True)
     cache.write_text("cache", encoding="utf-8")
+    note = _write(archive, "note.md", "note")
     (archive / "CONTENT_ARCHIVE.yaml").write_text(
         """schema: l4.content-archive/v1
 owner: personal
@@ -55,9 +56,9 @@ status: frozen
 execution_policy: deny
 captured_at: '2026-08-11T00:00:00+08:00'
 inventory:
-  files: 1
-  bytes: 5
-  tree_sha256: f2ab16080806c39a84ca67417f544d9b562f3a0a5e5447a071e85f2463b75a9c
+  files: 2
+  bytes: 9
+  tree_sha256: 8c5353ee153a2bda2affa60bd3ac0a7b2d00eed29b7d3161ae27f2f7663437ce
 consumer_evidence:
   scanned_at: '2026-08-11T00:00:00+08:00'
   active_consumers: []
@@ -65,6 +66,7 @@ consumer_evidence:
         encoding="utf-8",
     )
 
+    assert classify_artifact(tmp_path, note).kind == "content_archive"
     assert classify_artifact(tmp_path, cache).kind == "cache"
 
 

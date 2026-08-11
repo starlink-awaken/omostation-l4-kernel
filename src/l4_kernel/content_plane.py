@@ -127,6 +127,8 @@ def _workspace_bridge(path: Path) -> bool:
 def _auditable_file(path: Path) -> bool:
     """Include file links as artifacts while refusing directory-link recursion."""
 
+    if path.name == ARCHIVE_MANIFEST_NAME:
+        return path.is_file() or path.is_symlink()
     if path.is_symlink():
         return not path.is_dir()
     return path.is_file()

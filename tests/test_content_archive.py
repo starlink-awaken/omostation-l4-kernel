@@ -84,7 +84,10 @@ def test_missing_archive_field_fails_closed_with_stable_issue_code(tmp_path: Pat
     archive.mkdir(parents=True)
     source = archive / "run.py"
     source.write_text("print('old')\n", encoding="utf-8")
-    _write_archive_manifest(archive, execution_policy=None)
+    manifest = _write_archive_manifest(archive)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    del payload["execution_policy"]
+    manifest.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     result = classify_artifact(tmp_path, source)
 
@@ -153,6 +156,37 @@ def test_manifest_with_non_string_key_fails_closed_without_traceback(tmp_path: P
 
     assert report.ok is False
     assert {item.code for item in report.violations} == {"L4-CONTENT-011"}
+
+
+def test_invalid_utf8_manifest_fails_closed_without_traceback(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    archive.mkdir(parents=True)
+    source = archive / "run.py"
+    source.write_text("print('old')\n", encoding="utf-8")
+    (archive / "CONTENT_ARCHIVE.yaml").write_bytes(b"\xff\xfe")
+
+    try:
+        report = audit_content_plane(tmp_path)
+    except UnicodeError as error:
+        pytest.fail(f"invalid UTF-8 manifest must fail closed, not raise: {error}")
+
+    assert report.ok is False
+    assert {item.code for item in report.violations} == {"L4-CONTENT-011"}
+
+
+def test_manifest_symlink_to_directory_is_audited_as_invalid_contract(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    target = tmp_path / "outside"
+    archive.mkdir(parents=True)
+    target.mkdir()
+    (target / "secret.py").write_text("print('outside')\n", encoding="utf-8")
+    (archive / "CONTENT_ARCHIVE.yaml").symlink_to(target, target_is_directory=True)
+
+    report = audit_content_plane(tmp_path)
+
+    assert report.ok is False
+    assert any(item.kind == "contract" and item.code == "L4-CONTENT-011" for item in report.artifacts)
+    assert "_archive/old-tools/CONTENT_ARCHIVE.yaml/secret.py" not in {item.relative_path for item in report.artifacts}
 
 
 @pytest.mark.parametrize("captured_at", ["2026-08-11", "2026-08-11T00:00:00"])
