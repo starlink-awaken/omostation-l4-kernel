@@ -126,8 +126,9 @@ class TestInitDomainKems:
         def replace_manifest_then_fail(path, content, journal):
             if path.name == "Method.md":
                 manifest = root / "DOMAIN.yaml"
-                manifest.unlink()
-                manifest.write_text("replacement must survive\n", encoding="utf-8")
+                replacement = root / "caller-manifest.tmp"
+                replacement.write_text("replacement must survive\n", encoding="utf-8")
+                replacement.replace(manifest)
                 raise PermissionError("fail after replacement")
             return original_write(path, content, journal)
 
