@@ -177,6 +177,26 @@ def test_content_audit_json_accepts_contracts_and_content(tmp_path, monkeypatch,
     assert payload["data"]["counts"] == {"content": 1, "contract": 1}
 
 
+def test_domain_init_content_contracts_creates_auditable_declarative_bootstrap(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+
+    code, payload = invoke(monkeypatch, capsys, "domain", "init-content-contracts", str(root), "--name", "测试域", "--owner", "test")
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert (root / "DOMAIN.yaml").exists()
+    assert payload["data"]["audit"]["counts"].get("runtime", 0) == 0
+    assert payload["data"]["audit"]["counts"].get("cache", 0) == 0
+
+
+def test_domain_init_content_contracts_fails_closed_for_invalid_arguments(monkeypatch, capsys) -> None:
+    code, payload = invoke(monkeypatch, capsys, "domain", "init-content-contracts", "--owner", "")
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+
+
 def test_content_audit_json_reports_invalid_archive_with_stable_code(tmp_path, monkeypatch, capsys) -> None:
     archive = tmp_path / "_runtime" / "legacy"
     archive.mkdir(parents=True)

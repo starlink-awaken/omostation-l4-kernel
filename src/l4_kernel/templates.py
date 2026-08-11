@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+import warnings
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -337,7 +338,30 @@ class KemsValidator:
 # ═════════════════════════════════════════════════════════════════════
 
 
-def init_domain_kems(
+class DeclarativeBootstrapResult(list[Path]):
+    """List-compatible legacy result with machine-readable migration evidence."""
+
+    def __init__(self, paths: list[Path]) -> None:
+        super().__init__(paths)
+        self.deprecation: dict[str, str] = {
+            "code": "L4-DEPRECATION-001",
+            "message": "init_domain_kems now creates declarative content contracts only",
+            "replacement": "l4-kernel domain init-content-contracts",
+        }
+
+
+def _write_contract(path: Path, content: str, created: list[Path]) -> None:
+    """Write one declarative asset once, explicitly stripping executable bits."""
+
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    path.chmod(path.stat().st_mode & ~0o111)
+    created.append(path)
+
+
+def init_domain_content_contracts(
     domain_path: Path,
     domain_name: str = "新域",
     owner: str = "未指定",
@@ -346,50 +370,75 @@ def init_domain_kems(
     ssot_scope: str = "本域 KEMS 文件",
     key_files: str = "CARDS/ · _control/ · _knowledge/ · _storage/",
 ) -> list[Path]:
-    """为 DocumentDomain 创建标准 KEMS 六面骨架。
+    """Create only the declarative content contracts for one DocumentDomain."""
 
-    Returns:
-        创建的文件列表。
-    """
-    created = []
+    root = Path(domain_path).expanduser()
+    if root.exists() and not root.is_dir():
+        raise ValueError(f"domain path is not a directory: {root}")
+    if not domain_name.strip():
+        raise ValueError("domain name must not be empty")
+    if not owner.strip():
+        raise ValueError("owner must not be empty")
 
-    # 创建六面目录
-    for plane in ["_control", "_entities", "_knowledge", "_storage", "_archive"]:
-        p = domain_path / plane
-        p.mkdir(parents=True, exist_ok=True)
-        created.append(p)
-
-    # 创建决策日志目录
-    decisions = domain_path / "_control" / "决策日志"
-    decisions.mkdir(parents=True, exist_ok=True)
-    created.append(decisions)
-
-    # 生成控制面文件
-    today = datetime.now(UTC).strftime("%Y-%m-%d")
-    params = {
-        "domain_name": domain_name,
-        "owner": owner,
-        "created": today,
-        "domain_type_desc": domain_type_desc,
-        "domain_purpose": domain_purpose,
-        "ssot_scope": ssot_scope,
-        "key_files": key_files,
+    # 保留旧控制面消费者可写入其自身历史文档的契约目录；不放任何执行/状态产物。
+    (root / "_control").mkdir(parents=True, exist_ok=True)
+    domain_id = root.name or "domain"
+    manifest: dict[str, Any] = {
+        "apiVersion": "l4/v1",
+        "kind": "DomainManifest",
+        "id": domain_id,
+        "display_name": domain_name,
+        "archetype": "library",
+        "space_ref": "personal-space",
+        "root": ".",
+        "owners": [owner],
+        "principal_ref": owner,
+        "default_sensitivity": "private",
+        "default_visibility": "private",
+        "sharing_policy": "deny",
+        "retention": "permanent",
+        "authority_policy": "reference_library",
+        "harness_profile_ref": "harness://library/v1",
+        "lifecycle": "active",
+        "policy_refs": ["policy://personal-space"],
     }
-
     files = {
-        "MEMORY.md": MEMORY_TEMPLATE.format(**params),
-        "STATUS.md": STATUS_TEMPLATE.format(**params),
-        "signals.md": SIGNALS_TEMPLATE.format(**params),
-        "control-rules.md": CONTROL_RULES_TEMPLATE.format(**params),
-        "STATE.md": f"# STATE — {domain_name} 状态\n\n## 当前阶段定位\n\n## 活跃事项\n\n## 子域健康度\n",
-        "CLAUDE.md": f"# CLAUDE.md — {domain_name}\n\n域入口协议。\n",
-        "PLANE_INDEX.md": f"# PLANE_INDEX — {domain_name}\n\n六平面路由索引。\n",
+        "DOMAIN.yaml": yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False),
+        "Method.md": f"# Method — {domain_name}\n\n{domain_purpose}\n",
+        "profiles/Profile.md": f"# Profile — {domain_name}\n\n- Owner: {owner}\n- Type: {domain_type_desc}\n",
+        "ontology/DOMAIN_ONTOLOGY.md": f"# Domain ontology — {domain_name}\n\n- Scope: {ssot_scope}\n- Key files: {key_files}\n",
+        "rubrics/QUALITY_RUBRIC.md": f"# Quality rubric — {domain_name}\n\n- Content remains declarative and canonical.\n",
     }
-
-    for fname, content in files.items():
-        fp = domain_path / "_control" / fname
-        if not fp.exists():
-            fp.write_text(content, encoding="utf-8")
-            created.append(fp)
-
+    created: list[Path] = []
+    for relative_path, content in files.items():
+        _write_contract(root / relative_path, content, created)
     return created
+
+
+def init_domain_kems(
+    domain_path: Path,
+    domain_name: str = "新域",
+    owner: str = "未指定",
+    domain_type_desc: str = "功能域",
+    domain_purpose: str = "待定义",
+    ssot_scope: str = "本域 KEMS 文件",
+    key_files: str = "CARDS/ · _control/ · _knowledge/ · _storage/",
+) -> DeclarativeBootstrapResult:
+    """Deprecated compatibility API; creates declarative contracts only."""
+
+    warnings.warn(
+        "init_domain_kems is deprecated; use l4-kernel domain init-content-contracts",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return DeclarativeBootstrapResult(
+        init_domain_content_contracts(
+            domain_path,
+            domain_name=domain_name,
+            owner=owner,
+            domain_type_desc=domain_type_desc,
+            domain_purpose=domain_purpose,
+            ssot_scope=ssot_scope,
+            key_files=key_files,
+        )
+    )

@@ -17,7 +17,7 @@ from typing import Literal
 from l4_kernel.kems import KemsPlane
 from l4_kernel.registry import Domain, DomainRegistry
 from l4_kernel.signals import SignalBus
-from l4_kernel.templates import KemsValidator, init_domain_kems
+from l4_kernel.templates import KemsValidator, init_domain_content_contracts
 
 # model-driven 桥接 (可选依赖，导入失败时降级)
 try:
@@ -115,7 +115,7 @@ class DomainLifecycle:
         # DocumentDomain: 创建 KEMS 骨架
         created_files = []
         if domain_type == "document":
-            created_files = init_domain_kems(
+            created_files = init_domain_content_contracts(
                 path,
                 domain_name=name,
                 owner=owner,
@@ -125,13 +125,13 @@ class DomainLifecycle:
         # 注册
         self.registry.register(domain)
 
-        # 发射信号
-        self.signals.emit(
-            domain_id,
-            "ℹ️",
-            f"域创建完成: {name} ({domain_type})",
-            source="lifecycle.create",
-        )
+        if domain_type != "document":
+            self.signals.emit(
+                domain_id,
+                "ℹ️",
+                f"域创建完成: {name} ({domain_type})",
+                source="lifecycle.create",
+            )
 
         return {
             "status": "ok",
@@ -278,67 +278,26 @@ class DomainLifecycle:
     # ── 迁移 ────────────────────────────────────────────────────────
 
     def migrate(self, domain_id: str, to_version: str = "v5") -> dict:
-        """迁移域 KEMS 版本。
-
-        当前支持: v4 → v5 (KEMS 六面标准化)
-        """
+        """迁移域至 declarative content contracts, preserving the legacy envelope."""
         domain = self.registry.get(domain_id)
         if not domain or domain.domain_type != "document":
             return {"status": "error", "message": "Only DocumentDomain supports migration"}
 
-        changes = []
+        changes: list[str] = []
 
-        # v4 → v5: 确保 KEMS 六面目录存在
         if to_version == "v5":
-            required_planes = ["_control", "_entities", "_knowledge", "_storage", "_archive"]
-            for plane in required_planes:
-                p = domain.path / plane
-                if not p.is_dir():
-                    p.mkdir(parents=True, exist_ok=True)
-                    changes.append(f"created plane: {plane}")
-
-            # 确保 5 核心文件存在 (按需创建, 不覆盖已有)
-            control = domain.path / "_control"
-            from l4_kernel.templates import (
-                CONTROL_RULES_TEMPLATE,
-                MEMORY_TEMPLATE,
-                SIGNALS_TEMPLATE,
-                STATUS_TEMPLATE,
-            )
-
-            today = datetime.now(UTC).strftime("%Y-%m-%d")
-            params = {
-                "domain_name": domain.name,
-                "owner": "migrated",
-                "created": today,
-                "domain_type_desc": "",
-                "domain_purpose": "",
-                "ssot_scope": "",
-                "key_files": "",
-            }
-            file_templates = {
-                "STATE.md": f"# STATE — {domain.name} 状态\n\n## 当前阶段定位\n\n## 活跃事项\n",
-                "MEMORY.md": MEMORY_TEMPLATE.format(**params),
-                "signals.md": SIGNALS_TEMPLATE.format(**params),
-                "control-rules.md": CONTROL_RULES_TEMPLATE.format(**params),
-                "STATUS.md": STATUS_TEMPLATE.format(**params),
-            }
-            for f, template in file_templates.items():
-                if not (control / f).exists():
-                    (control / f).write_text(template, encoding="utf-8")
-                    changes.append(f"created control file: {f}")
-
-        self.signals.emit(
-            domain_id,
-            "ℹ️",
-            f"KEMS 迁移 {to_version}: {len(changes)} changes",
-            source="lifecycle.migrate",
-        )
+            created_files = init_domain_content_contracts(domain.path, domain_name=domain.name, owner="migrated")
+            changes = [f"created content contract: {path.relative_to(domain.path).as_posix()}" for path in created_files]
 
         return {
             "status": "ok",
             "message": f"Domain '{domain_id}' migrated to {to_version}",
             "changes": changes,
+            "deprecation": {
+                "code": "L4-DEPRECATION-001",
+                "message": "KEMS migration now creates declarative content contracts only",
+                "replacement": "l4-kernel domain init-content-contracts",
+            },
         }
 
     # ── 健康报告 ────────────────────────────────────────────────────

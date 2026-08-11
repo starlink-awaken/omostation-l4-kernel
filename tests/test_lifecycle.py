@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from l4_kernel.content_plane import audit_content_plane
 from l4_kernel.lifecycle import DomainLifecycle
 from l4_kernel.registry import DomainRegistry
 
@@ -34,9 +35,10 @@ class TestDomainCreate:
                 description="测试用域",
             )
             assert result["status"] == "ok"
-            # 验证 KEMS 骨架
-            assert (Path(td) / "_control" / "STATE.md").exists()
-            assert (Path(td) / "_control" / "MEMORY.md").exists()
+            root = Path(td)
+            assert (root / "DOMAIN.yaml").exists()
+            assert not (root / "_control" / "signals.md").exists()
+            assert audit_content_plane(root).counts.get("runtime", 0) == 0
 
     def test_create_duplicate(self, lifecycle):
         with tempfile.TemporaryDirectory() as td:
@@ -106,6 +108,10 @@ class TestDomainMigrate:
     def test_migrate_document(self, lifecycle):
         result = lifecycle.migrate("vault", "v5")
         assert result["status"] == "ok"
+        assert result["deprecation"]["replacement"] == "l4-kernel domain init-content-contracts"
+        report = audit_content_plane(lifecycle.registry.get("vault").path)  # type: ignore[union-attr]
+        assert report.counts.get("runtime", 0) == 0
+        assert report.counts.get("cache", 0) == 0
 
     def test_migrate_non_document(self, lifecycle):
         result = lifecycle.migrate("ai-config", "v5")

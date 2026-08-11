@@ -1,60 +1,75 @@
 """Tests for L4 Kernel templates — KEMS 标准模板与 Schema 校验。"""
 
+import stat
 import tempfile
 from pathlib import Path
 
+from l4_kernel.content_plane import audit_content_plane
+from l4_kernel.contracts import load_domain_manifest
 from l4_kernel.templates import KemsValidator, init_domain_kems
 
 
 class TestInitDomainKems:
-    def test_creates_all_planes(self):
+    def test_creates_only_declarative_content_contracts(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             created = init_domain_kems(root, domain_name="测试域", owner="test")
-            # 6 个目录 (_control, _entities, _knowledge, _storage, _archive, 决策日志)
-            dirs = [p for p in created if p.is_dir()]
-            assert len(dirs) >= 6
-            # 7 个控制面文件
-            files = [p for p in created if p.is_file()]
-            assert len(files) >= 7
+            assert set(created) == {
+                root / "Method.md",
+                root / "profiles" / "Profile.md",
+                root / "ontology" / "DOMAIN_ONTOLOGY.md",
+                root / "rubrics" / "QUALITY_RUBRIC.md",
+                root / "DOMAIN.yaml",
+            }
+            report = audit_content_plane(root)
+            assert report.ok
+            assert report.counts.get("runtime", 0) == 0
+            assert report.counts.get("cache", 0) == 0
+            manifest = load_domain_manifest(root / "DOMAIN.yaml")
+            assert manifest.root == root.resolve()
+            assert manifest.owners == ("test",)
+            assert manifest.principal_ref == "test"
 
-    def test_control_files_exist(self):
+    def test_legacy_api_never_creates_scripts_or_executable_files(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            init_domain_kems(root, domain_name="测试域", owner="test")
-            for f in ["MEMORY.md", "STATE.md", "signals.md", "control-rules.md", "STATUS.md"]:
-                assert (root / "_control" / f).exists(), f"Missing {f}"
+            result = init_domain_kems(root, domain_name="测试域", owner="test")
 
-    def test_status_contains_three_state_definition(self):
+            assert result.deprecation["replacement"] == "l4-kernel domain init-content-contracts"
+            assert all(path.suffix not in {".py", ".sh", ".bash", ".zsh"} for path in result)
+            assert all(not path.stat().st_mode & stat.S_IXUSR for path in result)
+
+    def test_preserves_existing_content(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            init_domain_kems(root, domain_name="测试域", owner="test")
-            content = (root / "_control" / "STATUS.md").read_text()
-            assert "STABLE" in content
-            assert "ALERT" in content
-            assert "CRITICAL" in content
+            method = root / "Method.md"
+            method.write_text("# 已有方法\n", encoding="utf-8")
 
-    def test_signals_contains_initial_entry(self):
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            init_domain_kems(root, domain_name="测试域", owner="test")
-            content = (root / "_control" / "signals.md").read_text()
-            assert "域初始化" in content
+            created = init_domain_kems(root, domain_name="测试域", owner="test")
 
-    def test_control_rules_has_cr01(self):
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            init_domain_kems(root, domain_name="测试域", owner="test")
-            content = (root / "_control" / "control-rules.md").read_text()
-            assert "CR01" in content
-            assert "CR02" in content
-            assert "CR03" in content
+            assert method.read_text(encoding="utf-8") == "# 已有方法\n"
+            assert method not in created
 
 
 class TestKemsValidator:
     def setup_domain(self, root: Path, owner: str = "test") -> None:
-        """创建标准 KEMS 骨架用于测试。"""
-        init_domain_kems(root, domain_name="测试域", owner=owner)
+        """构造旧 KEMS 校验器的最小有效输入。"""
+        control = root / "_control"
+        control.mkdir(parents=True)
+        control.joinpath("MEMORY.md").write_text(
+            f"---\ntitle: test\nstatus: 已采纳\ntype: canonical\nowner: {owner}\ncreated: 2026-01-01\n---\n# test\n",
+            encoding="utf-8",
+        )
+        control.joinpath("STATUS.md").write_text(
+            f"---\ntitle: test\nstatus: 已采纳\ntype: canonical\nowner: {owner}\ncreated: 2026-01-01\n---\n## 当前状态：STABLE\n",
+            encoding="utf-8",
+        )
+        control.joinpath("signals.md").write_text("# signals\n", encoding="utf-8")
+        control.joinpath("control-rules.md").write_text(
+            f"---\ntitle: test\nstatus: 已采纳\ntype: canonical\nowner: {owner}\ncreated: 2026-01-01\n---\nCR01\n",
+            encoding="utf-8",
+        )
+        control.joinpath("STATE.md").write_text("# state\n", encoding="utf-8")
 
     def test_validate_all_clean(self):
         with tempfile.TemporaryDirectory() as td:
