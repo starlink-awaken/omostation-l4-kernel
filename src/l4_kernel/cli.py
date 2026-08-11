@@ -403,14 +403,14 @@ def cmd_domain_init_content_contracts(args: list[str]) -> int:
         _json_envelope(
             error={
                 "code": "L4-CONFIG-002",
-                "message": "usage: domain init-content-contracts ROOT [--name NAME] [--owner OWNER]",
+                "message": "usage: domain init-content-contracts ROOT --domain-id ID [--name NAME] [--owner OWNER]",
                 "path": None,
             }
         )
         return 2
 
     root = Path(args[0]).expanduser()
-    options = {"--name": root.name, "--owner": "未指定"}
+    options = {"--domain-id": None, "--name": root.name, "--owner": "未指定"}
     seen: set[str] = set()
     index = 1
     while index < len(args):
@@ -419,7 +419,7 @@ def cmd_domain_init_content_contracts(args: list[str]) -> int:
             _json_envelope(
                 error={
                     "code": "L4-CONFIG-002",
-                    "message": "usage: domain init-content-contracts ROOT [--name NAME] [--owner OWNER]",
+                    "message": "usage: domain init-content-contracts ROOT --domain-id ID [--name NAME] [--owner OWNER]",
                     "path": str(root),
                 }
             )
@@ -435,12 +435,23 @@ def cmd_domain_init_content_contracts(args: list[str]) -> int:
         index += 2
 
     try:
-        created = init_domain_content_contracts(root, domain_name=options["--name"], owner=options["--owner"])
+        if options["--domain-id"] is None:
+            raise ValueError("--domain-id is required")
+        created = init_domain_content_contracts(
+            root,
+            domain_id=options["--domain-id"],
+            domain_name=options["--name"],
+            owner=options["--owner"],
+        )
+        manifest = load_domain_manifest(root / "DOMAIN.yaml")
         audit = audit_content_plane(root)
-    except ValueError as error:
+    except ContractError as error:
+        _json_envelope(error=_contract_error(error))
+        return 1
+    except (OSError, ValueError) as error:
         _json_envelope(error={"code": "L4-CONFIG-002", "message": str(error), "path": str(root)})
         return 2
-    _json_envelope(data={"created_files": [str(path) for path in created], "audit": audit.to_dict()})
+    _json_envelope(data={"created_files": [str(path) for path in created], "manifest": asdict(manifest), "audit": audit.to_dict()})
     return 0 if audit.ok else 1
 
 

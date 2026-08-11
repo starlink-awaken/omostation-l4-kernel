@@ -4,10 +4,40 @@ import tempfile
 from pathlib import Path
 
 import pytest
+import yaml
 
 from l4_kernel.content_plane import audit_content_plane
 from l4_kernel.lifecycle import DomainLifecycle
-from l4_kernel.registry import DomainRegistry
+from l4_kernel.registry import Domain, DomainRegistry
+
+
+def write_domain_manifest(root: Path, domain_id: str, owner: str) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "DOMAIN.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "apiVersion": "l4/v1",
+                "kind": "DomainManifest",
+                "id": domain_id,
+                "display_name": domain_id,
+                "archetype": "library",
+                "space_ref": "personal-space",
+                "root": ".",
+                "owners": [owner],
+                "principal_ref": owner,
+                "default_sensitivity": "private",
+                "default_visibility": "private",
+                "sharing_policy": "deny",
+                "retention": "permanent",
+                "authority_policy": "reference_library",
+                "harness_profile_ref": "harness://library/v1",
+                "lifecycle": "active",
+                "policy_refs": ["policy://personal-space"],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
 
 
 @pytest.fixture
@@ -39,6 +69,7 @@ class TestDomainCreate:
             assert (root / "DOMAIN.yaml").exists()
             assert not (root / "_control" / "signals.md").exists()
             assert audit_content_plane(root).counts.get("runtime", 0) == 0
+            assert lifecycle.validate("test-create")["status"] == "ok"
 
     def test_create_duplicate(self, lifecycle):
         with tempfile.TemporaryDirectory() as td:
@@ -85,31 +116,52 @@ class TestDomainValidate:
 class TestDomainFreezeUnfreeze:
     def test_freeze_unfreeze(self, lifecycle):
         result = lifecycle.freeze("vault", "测试冻结")
-        assert result["status"] == "ok"
+        assert result["status"] == "deprecated"
+        assert result["deprecation"]["replacement"] == "OMO/Runtime authority"
 
         result = lifecycle.unfreeze("vault")
-        assert result["status"] == "ok"
+        assert result["status"] == "deprecated"
+        assert result["deprecation"]["replacement"] == "OMO/Runtime authority"
 
     def test_freeze_nonexistent(self, lifecycle):
         result = lifecycle.freeze("nonexistent")
         assert result["status"] == "error"
 
+    def test_document_operations_are_non_mutating_deprecations(self, lifecycle, tmp_path):
+        root = tmp_path / "declarative-domain"
+        assert lifecycle.create("declarative-id", "声明式域", "document", root, owner="trusted-owner")["status"] == "ok"
+        before = sorted(path.relative_to(root).as_posix() for path in root.rglob("*"))
+
+        for operation in (lifecycle.freeze, lifecycle.unfreeze, lifecycle.archive, lifecycle.restore):
+            result = operation("declarative-id")
+            assert result["status"] == "deprecated"
+            assert result["deprecation"]["replacement"] == "OMO/Runtime authority"
+
+        after = sorted(path.relative_to(root).as_posix() for path in root.rglob("*"))
+        assert after == before
+
 
 class TestDomainArchiveRestore:
     def test_archive_restore(self, lifecycle):
         result = lifecycle.archive("vault", "测试归档")
-        assert result["status"] == "ok"
+        assert result["status"] == "deprecated"
+        assert result["deprecation"]["replacement"] == "OMO/Runtime authority"
 
         result = lifecycle.restore("vault")
-        assert result["status"] == "ok"
+        assert result["status"] == "deprecated"
+        assert result["deprecation"]["replacement"] == "OMO/Runtime authority"
 
 
 class TestDomainMigrate:
     def test_migrate_document(self, lifecycle):
+        domain = lifecycle.registry.get("vault")
+        assert domain is not None
+        write_domain_manifest(domain.path, "vault", "trusted-owner")
         result = lifecycle.migrate("vault", "v5")
         assert result["status"] == "ok"
         assert result["deprecation"]["replacement"] == "l4-kernel domain init-content-contracts"
-        report = audit_content_plane(lifecycle.registry.get("vault").path)  # type: ignore[union-attr]
+        assert "trusted-owner" in (domain.path / "profiles" / "Profile.md").read_text(encoding="utf-8")
+        report = audit_content_plane(domain.path)
         assert report.counts.get("runtime", 0) == 0
         assert report.counts.get("cache", 0) == 0
 
@@ -120,6 +172,53 @@ class TestDomainMigrate:
     def test_migrate_all(self, lifecycle):
         results = lifecycle.migrate_all_document_domains("v5")
         assert len(results) >= 1
+
+    def test_migrate_uses_manifest_identity_and_authoritative_owner(self, lifecycle, tmp_path):
+        root = tmp_path / "path-basename-must-not-win"
+        write_domain_manifest(root, "registry-id", "trusted-owner")
+        lifecycle.registry.register(
+            Domain(
+                id="registry-id",
+                name="注册表域",
+                domain_type="document",
+                path=root,
+                bos_uri="bos://registry-id/**",
+            )
+        )
+
+        result = lifecycle.migrate("registry-id")
+
+        assert result["status"] == "ok"
+        assert "trusted-owner" in (root / "profiles" / "Profile.md").read_text(encoding="utf-8")
+        assert "registry-id" in (root / "DOMAIN.yaml").read_text(encoding="utf-8")
+
+    def test_migrate_without_trusted_owner_fails_closed(self, lifecycle):
+        result = lifecycle.migrate("vault")
+
+        assert result["status"] == "error"
+        assert result["deprecation"]["replacement"] == "l4-kernel domain init-content-contracts"
+
+    def test_migrate_returns_stable_error_when_contract_preflight_rejects_path(self, lifecycle, tmp_path):
+        root = tmp_path / "unsafe-domain"
+        external = tmp_path / "external"
+        write_domain_manifest(root, "unsafe-id", "trusted-owner")
+        external.mkdir()
+        (root / "profiles").symlink_to(external, target_is_directory=True)
+        lifecycle.registry.register(
+            Domain(
+                id="unsafe-id",
+                name="不安全域",
+                domain_type="document",
+                path=root,
+                bos_uri="bos://unsafe-id/**",
+            )
+        )
+
+        result = lifecycle.migrate("unsafe-id")
+
+        assert result["status"] == "error"
+        assert result["changes"] == []
+        assert list(external.iterdir()) == []
 
 
 class TestDomainHealthReport:

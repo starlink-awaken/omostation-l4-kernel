@@ -180,11 +180,24 @@ def test_content_audit_json_accepts_contracts_and_content(tmp_path, monkeypatch,
 def test_domain_init_content_contracts_creates_auditable_declarative_bootstrap(tmp_path, monkeypatch, capsys) -> None:
     root = tmp_path / "domain"
 
-    code, payload = invoke(monkeypatch, capsys, "domain", "init-content-contracts", str(root), "--name", "测试域", "--owner", "test")
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+        "--name",
+        "测试域",
+        "--owner",
+        "test",
+    )
 
     assert code == 0
     assert payload["ok"] is True
     assert (root / "DOMAIN.yaml").exists()
+    assert payload["data"]["manifest"]["id"] == "registry-id"
     assert payload["data"]["audit"]["counts"].get("runtime", 0) == 0
     assert payload["data"]["audit"]["counts"].get("cache", 0) == 0
 
@@ -195,6 +208,100 @@ def test_domain_init_content_contracts_fails_closed_for_invalid_arguments(monkey
     assert code == 2
     assert payload["ok"] is False
     assert payload["error"]["code"] == "L4-CONFIG-002"
+
+
+def test_domain_init_content_contracts_rejects_existing_malformed_manifest(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+    root.mkdir()
+    (root / "DOMAIN.yaml").write_text("kind: DomainManifest\n", encoding="utf-8")
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+        "--owner",
+        "test",
+    )
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONTRACT-001"
+    assert sorted(path.name for path in root.iterdir()) == ["DOMAIN.yaml"]
+
+
+def test_domain_init_content_contracts_preflights_symlinked_target_without_partial_write(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+    external = tmp_path / "external"
+    root.mkdir()
+    external.mkdir()
+    (root / "profiles").symlink_to(external, target_is_directory=True)
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+        "--owner",
+        "test",
+    )
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+    assert list(external.iterdir()) == []
+    assert sorted(path.name for path in root.iterdir()) == ["profiles"]
+
+
+def test_domain_init_content_contracts_rejects_executable_existing_target_without_overwrite(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+    root.mkdir()
+    method = root / "Method.md"
+    method.write_text("# existing\n", encoding="utf-8")
+    method.chmod(0o755)
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+        "--owner",
+        "test",
+    )
+
+    assert code == 2
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+    assert method.stat().st_mode & 0o111
+    assert sorted(path.name for path in root.iterdir()) == ["Method.md"]
+
+
+def test_domain_init_content_contracts_rejects_traversal_in_authoritative_domain_id(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "../outside",
+        "--owner",
+        "test",
+    )
+
+    assert code == 2
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+    assert not root.exists()
 
 
 def test_content_audit_json_reports_invalid_archive_with_stable_code(tmp_path, monkeypatch, capsys) -> None:

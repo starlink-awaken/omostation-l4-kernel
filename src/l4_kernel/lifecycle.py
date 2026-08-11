@@ -10,14 +10,14 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from l4_kernel.kems import KemsPlane
+from l4_kernel.content_plane import audit_content_plane
+from l4_kernel.contracts import ContractError, load_domain_manifest
 from l4_kernel.registry import Domain, DomainRegistry
 from l4_kernel.signals import SignalBus
-from l4_kernel.templates import KemsValidator, init_domain_content_contracts
+from l4_kernel.templates import init_domain_content_contracts
 
 # model-driven 桥接 (可选依赖，导入失败时降级)
 try:
@@ -117,6 +117,7 @@ class DomainLifecycle:
         if domain_type == "document":
             created_files = init_domain_content_contracts(
                 path,
+                domain_id=domain_id,
                 domain_name=name,
                 owner=owner,
                 domain_type_desc=description or f"{name} 域",
@@ -199,16 +200,28 @@ class DomainLifecycle:
             result["checks"]["path_error"] = f"Path '{domain.path}' does not exist"
             return result
 
-        # KEMS 校验 (仅 DocumentDomain)
+        # DocumentDomain 仅校验正式 manifest 与 content-plane 边界。
         if domain.domain_type == "document":
-            validator = KemsValidator(domain.path)
-            violations = validator.validate_all()
-            errors = [v for v in violations if v["severity"] == "error"]
-            result["checks"]["kems_violations"] = len(violations)
-            result["checks"]["kems_errors"] = len(errors)
-            if errors:
+            manifest_path = domain.path / "DOMAIN.yaml"
+            try:
+                manifest = load_domain_manifest(manifest_path)
+                if manifest.id != domain.id or manifest.root != domain.path.resolve():
+                    raise ContractError("L4-CONTRACT-001", "DOMAIN.yaml does not match registry identity", manifest_path)
+                result["checks"]["domain_manifest"] = "valid"
+            except ContractError as error:
                 result["status"] = "error"
-                result["checks"]["kems_error_details"] = errors[:5]
+                result["checks"]["domain_manifest"] = error.message
+                return result
+            try:
+                report = audit_content_plane(domain.path)
+            except (OSError, ValueError) as error:
+                result["status"] = "error"
+                result["checks"]["content_plane"] = str(error)
+                return result
+            result["checks"]["content_plane_counts"] = report.counts
+            result["checks"]["content_plane_violations"] = [item.to_dict() for item in report.violations]
+            if not report.ok:
+                result["status"] = "error"
 
         return result
 
@@ -220,10 +233,8 @@ class DomainLifecycle:
         if not domain:
             return {"status": "error", "message": f"Domain '{domain_id}' not found"}
 
-        # 更新 STATUS
         if domain.domain_type == "document":
-            kems = KemsPlane(domain.path)
-            kems.write_status({"status": "frozen", "frozen_reason": reason, "frozen_at": datetime.now(UTC).isoformat()})
+            return self._document_lifecycle_deprecated(domain_id, "freeze")
 
         self.signals.emit(domain_id, "⚠️", f"域已冻结: {reason}" if reason else "域已冻结", source="lifecycle.freeze")
         return {"status": "ok", "message": f"Domain '{domain_id}' frozen"}
@@ -235,8 +246,7 @@ class DomainLifecycle:
             return {"status": "error", "message": f"Domain '{domain_id}' not found"}
 
         if domain.domain_type == "document":
-            kems = KemsPlane(domain.path)
-            kems.write_status({"status": "active", "unfrozen_at": datetime.now(UTC).isoformat()})
+            return self._document_lifecycle_deprecated(domain_id, "unfreeze")
 
         self.signals.emit(domain_id, "✅", "域已解冻", source="lifecycle.unfreeze")
         return {"status": "ok", "message": f"Domain '{domain_id}' unfrozen"}
@@ -250,14 +260,7 @@ class DomainLifecycle:
             return {"status": "error", "message": f"Domain '{domain_id}' not found"}
 
         if domain.domain_type == "document":
-            kems = KemsPlane(domain.path)
-            kems.write_status(
-                {
-                    "status": "archived",
-                    "archived_reason": reason,
-                    "archived_at": datetime.now(UTC).isoformat(),
-                }
-            )
+            return self._document_lifecycle_deprecated(domain_id, "archive")
 
         self.signals.emit(domain_id, "ℹ️", f"域已归档: {reason}" if reason else "域已归档", source="lifecycle.archive")
         return {"status": "ok", "message": f"Domain '{domain_id}' archived"}
@@ -269,8 +272,7 @@ class DomainLifecycle:
             return {"status": "error", "message": f"Domain '{domain_id}' not found"}
 
         if domain.domain_type == "document":
-            kems = KemsPlane(domain.path)
-            kems.write_status({"status": "active", "restored_at": datetime.now(UTC).isoformat()})
+            return self._document_lifecycle_deprecated(domain_id, "restore")
 
         self.signals.emit(domain_id, "✅", "域已恢复", source="lifecycle.restore")
         return {"status": "ok", "message": f"Domain '{domain_id}' restored"}
@@ -286,8 +288,23 @@ class DomainLifecycle:
         changes: list[str] = []
 
         if to_version == "v5":
-            created_files = init_domain_content_contracts(domain.path, domain_name=domain.name, owner="migrated")
-            changes = [f"created content contract: {path.relative_to(domain.path).as_posix()}" for path in created_files]
+            manifest_path = domain.path / "DOMAIN.yaml"
+            try:
+                manifest = load_domain_manifest(manifest_path)
+            except ContractError as error:
+                return self._migration_error(domain_id, error.message)
+            if manifest.id != domain.id or manifest.root != domain.path.resolve():
+                return self._migration_error(domain_id, "DOMAIN.yaml does not match registry identity")
+            try:
+                created_files = init_domain_content_contracts(
+                    domain.path,
+                    domain_id=domain.id,
+                    domain_name=domain.name,
+                    owner=manifest.principal_ref,
+                )
+            except (ContractError, OSError, ValueError) as error:
+                return self._migration_error(domain_id, str(error))
+            changes = [f"created content contract: {path.relative_to(domain.path.resolve()).as_posix()}" for path in created_files]
 
         return {
             "status": "ok",
@@ -296,6 +313,30 @@ class DomainLifecycle:
             "deprecation": {
                 "code": "L4-DEPRECATION-001",
                 "message": "KEMS migration now creates declarative content contracts only",
+                "replacement": "l4-kernel domain init-content-contracts",
+            },
+        }
+
+    @staticmethod
+    def _document_lifecycle_deprecated(domain_id: str, action: str) -> dict:
+        return {
+            "status": "deprecated",
+            "message": f"DocumentDomain '{domain_id}' {action} is delegated to OMO/Runtime authority",
+            "deprecation": {
+                "code": "L4-DEPRECATION-001",
+                "replacement": "OMO/Runtime authority",
+                "authority": "omo",
+            },
+        }
+
+    @staticmethod
+    def _migration_error(domain_id: str, message: str) -> dict:
+        return {
+            "status": "error",
+            "message": f"Domain '{domain_id}' migration refused: {message}",
+            "changes": [],
+            "deprecation": {
+                "code": "L4-DEPRECATION-001",
                 "replacement": "l4-kernel domain init-content-contracts",
             },
         }

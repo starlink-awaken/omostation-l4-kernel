@@ -6,11 +6,14 @@
 from __future__ import annotations
 
 import re
+import stat
 import warnings
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from l4_kernel.contracts import ContractError, load_domain_manifest
 
 # ═════════════════════════════════════════════════════════════════════
 # 标准模板集
@@ -349,9 +352,84 @@ class DeclarativeBootstrapResult(list[Path]):
             "replacement": "l4-kernel domain init-content-contracts",
         }
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return JSON-ready compatibility evidence without changing list semantics."""
+
+        return {"created_files": [str(path) for path in self], "deprecation": dict(self.deprecation)}
+
+
+_CONTRACT_FILES = (
+    "DOMAIN.yaml",
+    "Method.md",
+    "profiles/Profile.md",
+    "ontology/DOMAIN_ONTOLOGY.md",
+    "rubrics/QUALITY_RUBRIC.md",
+)
+
+
+def _validate_text(value: str, label: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{label} must be a string")
+    normalized = value.strip()
+    if not normalized or "\x00" in normalized:
+        raise ValueError(f"{label} must not be empty")
+    if label == "domain id" and ("/" in normalized or "\\" in normalized or normalized in {".", ".."}):
+        raise ValueError("domain id must not contain path traversal")
+    return normalized
+
+
+def _contract_root(domain_path: Path) -> Path:
+    requested = Path(domain_path).expanduser()
+    if not requested.is_absolute() or ".." in requested.parts:
+        raise ValueError("domain path must be an absolute path without traversal")
+    if requested.is_symlink():
+        raise ValueError(f"domain path must not be a symlink: {requested}")
+    root = requested.resolve(strict=False)
+    if root.exists():
+        mode = root.lstat().st_mode
+        if not stat.S_ISDIR(mode):
+            raise ValueError(f"domain path is not a directory: {root}")
+    return root
+
+
+def _preflight_contract_paths(root: Path) -> tuple[Path, ...]:
+    """Reject every unsafe destination before the first bootstrap write."""
+
+    targets = tuple(root / relative for relative in _CONTRACT_FILES)
+    parents = {root}
+    for target in targets:
+        parent = target.parent
+        while parent != root:
+            parents.add(parent)
+            parent = parent.parent
+
+    for parent in sorted(parents, key=lambda path: len(path.parts)):
+        if not parent.exists() and not parent.is_symlink():
+            continue
+        if parent.is_symlink() or not stat.S_ISDIR(parent.lstat().st_mode):
+            raise ValueError(f"unsafe contract parent: {parent}")
+    for target in targets:
+        if not target.exists() and not target.is_symlink():
+            continue
+        mode = target.lstat().st_mode
+        if target.is_symlink() or not stat.S_ISREG(mode):
+            raise ValueError(f"unsafe contract target: {target}")
+        if mode & 0o111:
+            raise ValueError(f"executable contract target: {target}")
+    return targets
+
+
+def _verify_existing_manifest(root: Path, domain_id: str, owner: str) -> None:
+    manifest_path = root / "DOMAIN.yaml"
+    if not manifest_path.exists():
+        return
+    manifest = load_domain_manifest(manifest_path)
+    if manifest.root != root or manifest.id != domain_id or manifest.principal_ref != owner:
+        raise ValueError(f"conflicting existing DOMAIN.yaml: {manifest_path}")
+
 
 def _write_contract(path: Path, content: str, created: list[Path]) -> None:
-    """Write one declarative asset once, explicitly stripping executable bits."""
+    """Write one preflighted declarative asset once."""
 
     if path.exists():
         return
@@ -363,6 +441,8 @@ def _write_contract(path: Path, content: str, created: list[Path]) -> None:
 
 def init_domain_content_contracts(
     domain_path: Path,
+    *,
+    domain_id: str,
     domain_name: str = "新域",
     owner: str = "未指定",
     domain_type_desc: str = "功能域",
@@ -372,17 +452,13 @@ def init_domain_content_contracts(
 ) -> list[Path]:
     """Create only the declarative content contracts for one DocumentDomain."""
 
-    root = Path(domain_path).expanduser()
-    if root.exists() and not root.is_dir():
-        raise ValueError(f"domain path is not a directory: {root}")
-    if not domain_name.strip():
-        raise ValueError("domain name must not be empty")
-    if not owner.strip():
-        raise ValueError("owner must not be empty")
+    root = _contract_root(domain_path)
+    domain_id = _validate_text(domain_id, "domain id")
+    domain_name = _validate_text(domain_name, "domain name")
+    owner = _validate_text(owner, "owner")
+    targets = _preflight_contract_paths(root)
+    _verify_existing_manifest(root, domain_id, owner)
 
-    # 保留旧控制面消费者可写入其自身历史文档的契约目录；不放任何执行/状态产物。
-    (root / "_control").mkdir(parents=True, exist_ok=True)
-    domain_id = root.name or "domain"
     manifest: dict[str, Any] = {
         "apiVersion": "l4/v1",
         "kind": "DomainManifest",
@@ -402,16 +478,21 @@ def init_domain_content_contracts(
         "lifecycle": "active",
         "policy_refs": ["policy://personal-space"],
     }
-    files = {
-        "DOMAIN.yaml": yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False),
-        "Method.md": f"# Method — {domain_name}\n\n{domain_purpose}\n",
-        "profiles/Profile.md": f"# Profile — {domain_name}\n\n- Owner: {owner}\n- Type: {domain_type_desc}\n",
-        "ontology/DOMAIN_ONTOLOGY.md": f"# Domain ontology — {domain_name}\n\n- Scope: {ssot_scope}\n- Key files: {key_files}\n",
-        "rubrics/QUALITY_RUBRIC.md": f"# Quality rubric — {domain_name}\n\n- Content remains declarative and canonical.\n",
+    files: dict[Path, str] = {
+        root / "DOMAIN.yaml": yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False),
+        root / "Method.md": f"# Method — {domain_name}\n\n{domain_purpose}\n",
+        root / "profiles" / "Profile.md": f"# Profile — {domain_name}\n\n- Owner: {owner}\n- Type: {domain_type_desc}\n",
+        root / "ontology" / "DOMAIN_ONTOLOGY.md": f"# Domain ontology — {domain_name}\n\n- Scope: {ssot_scope}\n- Key files: {key_files}\n",
+        root / "rubrics" / "QUALITY_RUBRIC.md": f"# Quality rubric — {domain_name}\n\n- Content remains declarative and canonical.\n",
     }
     created: list[Path] = []
-    for relative_path, content in files.items():
-        _write_contract(root / relative_path, content, created)
+    for path, content in files.items():
+        _write_contract(path, content, created)
+    if set(targets) != set(files):  # defensive invariant for future template edits
+        raise RuntimeError("contract preflight and output targets diverged")
+    generated = load_domain_manifest(root / "DOMAIN.yaml")
+    if generated.root != root or generated.id != domain_id or generated.principal_ref != owner:
+        raise ContractError("L4-CONTRACT-001", "generated DOMAIN.yaml identity mismatch", root / "DOMAIN.yaml")
     return created
 
 
@@ -423,6 +504,8 @@ def init_domain_kems(
     domain_purpose: str = "待定义",
     ssot_scope: str = "本域 KEMS 文件",
     key_files: str = "CARDS/ · _control/ · _knowledge/ · _storage/",
+    *,
+    domain_id: str | None = None,
 ) -> DeclarativeBootstrapResult:
     """Deprecated compatibility API; creates declarative contracts only."""
 
@@ -434,6 +517,7 @@ def init_domain_kems(
     return DeclarativeBootstrapResult(
         init_domain_content_contracts(
             domain_path,
+            domain_id=domain_id or Path(domain_path).expanduser().resolve(strict=False).name,
             domain_name=domain_name,
             owner=owner,
             domain_type_desc=domain_type_desc,

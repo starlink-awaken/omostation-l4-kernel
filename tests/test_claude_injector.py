@@ -16,6 +16,7 @@ def temp_domain_with_claude():
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         init_domain_kems(root, domain_name="测试域", owner="test")
+        (root / "_control").mkdir()
         # 覆写 CLAUDE.md 为真实格式
         (root / "_control" / "CLAUDE.md").write_text(
             "# @测试域 — 测试域\n\n"

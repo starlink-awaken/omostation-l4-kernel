@@ -1,30 +1,33 @@
 """Tests for L4 Kernel templates — KEMS 标准模板与 Schema 校验。"""
 
+import json
 import stat
 import tempfile
 from pathlib import Path
 
 from l4_kernel.content_plane import audit_content_plane
 from l4_kernel.contracts import load_domain_manifest
-from l4_kernel.templates import KemsValidator, init_domain_kems
+from l4_kernel.templates import KemsValidator, init_domain_content_contracts, init_domain_kems
 
 
 class TestInitDomainKems:
     def test_creates_only_declarative_content_contracts(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
+            canonical_root = root.resolve()
             created = init_domain_kems(root, domain_name="测试域", owner="test")
             assert set(created) == {
-                root / "Method.md",
-                root / "profiles" / "Profile.md",
-                root / "ontology" / "DOMAIN_ONTOLOGY.md",
-                root / "rubrics" / "QUALITY_RUBRIC.md",
-                root / "DOMAIN.yaml",
+                canonical_root / "Method.md",
+                canonical_root / "profiles" / "Profile.md",
+                canonical_root / "ontology" / "DOMAIN_ONTOLOGY.md",
+                canonical_root / "rubrics" / "QUALITY_RUBRIC.md",
+                canonical_root / "DOMAIN.yaml",
             }
             report = audit_content_plane(root)
             assert report.ok
             assert report.counts.get("runtime", 0) == 0
             assert report.counts.get("cache", 0) == 0
+            assert not (root / "_control").exists()
             manifest = load_domain_manifest(root / "DOMAIN.yaml")
             assert manifest.root == root.resolve()
             assert manifest.owners == ("test",)
@@ -36,6 +39,7 @@ class TestInitDomainKems:
             result = init_domain_kems(root, domain_name="测试域", owner="test")
 
             assert result.deprecation["replacement"] == "l4-kernel domain init-content-contracts"
+            assert json.loads(json.dumps(result.to_dict()))["deprecation"] == result.deprecation
             assert all(path.suffix not in {".py", ".sh", ".bash", ".zsh"} for path in result)
             assert all(not path.stat().st_mode & stat.S_IXUSR for path in result)
 
@@ -49,6 +53,13 @@ class TestInitDomainKems:
 
             assert method.read_text(encoding="utf-8") == "# 已有方法\n"
             assert method not in created
+
+    def test_explicit_domain_id_wins_over_path_basename(self, tmp_path):
+        root = tmp_path / "path-basename"
+
+        init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert load_domain_manifest(root / "DOMAIN.yaml").id == "registry-id"
 
 
 class TestKemsValidator:
