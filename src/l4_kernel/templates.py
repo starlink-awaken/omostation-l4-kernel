@@ -432,8 +432,12 @@ class _BootstrapJournal:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.file_entries: list[_JournalEntry] = []
-        self.uncertain_paths: list[Path] = []
-        self.durability_uncertain_paths: list[Path] = []
+        self.uncertain_file_paths: list[Path] = []
+        self.uncertain_directory_paths: list[Path] = []
+        self.durability_uncertain_file_paths: list[Path] = []
+        self.durability_uncertain_directory_paths: list[Path] = []
+        self._uncertain_paths: list[Path] = []
+        self._durability_uncertain_paths: list[Path] = []
 
     @property
     def created_files(self) -> list[Path]:
@@ -444,11 +448,29 @@ class _BootstrapJournal:
         if path not in paths:
             paths.append(path)
 
-    def record_uncertain(self, path: Path) -> None:
-        self._record(self.uncertain_paths, path)
+    @property
+    def uncertain_paths(self) -> tuple[Path, ...]:
+        return tuple(self._uncertain_paths)
 
-    def record_durability_uncertain(self, path: Path) -> None:
-        self._record(self.durability_uncertain_paths, path)
+    @property
+    def durability_uncertain_paths(self) -> tuple[Path, ...]:
+        return tuple(self._durability_uncertain_paths)
+
+    def record_uncertain_file(self, path: Path) -> None:
+        self._record(self.uncertain_file_paths, path)
+        self._record(self._uncertain_paths, path)
+
+    def record_uncertain_directory(self, path: Path) -> None:
+        self._record(self.uncertain_directory_paths, path)
+        self._record(self._uncertain_paths, path)
+
+    def record_file_durability_uncertain(self, path: Path) -> None:
+        self._record(self.durability_uncertain_file_paths, path)
+        self._record(self._durability_uncertain_paths, path)
+
+    def record_directory_durability_uncertain(self, path: Path) -> None:
+        self._record(self.durability_uncertain_directory_paths, path)
+        self._record(self._durability_uncertain_paths, path)
 
 
 def _before_contract_publication(root: Path) -> None:
@@ -589,12 +611,12 @@ def _record_created_file(journal: _BootstrapJournal, fd: int, path: Path, payloa
     try:
         info = _secure_call("fstat created file", os.fstat, fd)
     except OSError:
-        journal.record_uncertain(path)
-        journal.record_durability_uncertain(path)
+        journal.record_uncertain_file(path)
+        journal.record_file_durability_uncertain(path)
         raise
     if not stat.S_ISREG(info.st_mode):
-        journal.record_uncertain(path)
-        journal.record_durability_uncertain(path)
+        journal.record_uncertain_file(path)
+        journal.record_file_durability_uncertain(path)
         raise OSError(errno.EIO, f"created file changed before ownership could be recorded: {path}")
     journal.file_entries.append(_JournalEntry(path, info.st_dev, info.st_ino, len(payload), hashlib.sha256(payload).hexdigest()))
 
@@ -610,11 +632,11 @@ def _create_directory(journal: _BootstrapJournal, parent_fd: int, parent: Path, 
 
     path = parent / name
     _secure_call("mkdir at", os.mkdir, name, mode=0o755, dir_fd=parent_fd)
-    journal.record_uncertain(path)
+    journal.record_uncertain_directory(path)
     try:
         _fsync_fd(parent_fd, "fsync directory creation")
     except OSError:
-        journal.record_durability_uncertain(path)
+        journal.record_directory_durability_uncertain(path)
         raise
     _after_directory_creation(path)
 
@@ -677,7 +699,7 @@ def _write_contract(path: Path, payload: bytes, journal: _BootstrapJournal) -> N
             try:
                 _reject_incomplete_target(path, current.st_mode)
             except BootstrapWriteError:
-                journal.record_uncertain(path)
+                journal.record_uncertain_file(path)
                 raise
             return
         fd = _secure_call(
@@ -701,15 +723,15 @@ def _write_contract(path: Path, payload: bytes, journal: _BootstrapJournal) -> N
                 _secure_call("publish contract mode", os.fchmod, fd, _PUBLISHED_MODE)
                 _fsync_fd(fd, "fsync contract file metadata")
             except OSError:
-                journal.record_uncertain(path)
-                journal.record_durability_uncertain(path)
+                journal.record_uncertain_file(path)
+                journal.record_file_durability_uncertain(path)
                 raise
         finally:
             os.close(fd)
         try:
             _fsync_fd(parent_fd, "fsync contract directory entry")
         except OSError:
-            journal.record_durability_uncertain(path)
+            journal.record_file_durability_uncertain(path)
             raise
     finally:
         if parent_fd is not None:
@@ -762,7 +784,11 @@ def _sample_file_entry(root: Path, entry: _JournalEntry) -> _FileSample:
     fd_post: os.stat_result | None = None
     path_post: os.stat_result | None = None
     digest = hashlib.sha256()
-    inspect_error: OSError | None = None
+    inspect_errors: list[str] = []
+
+    def record_inspect_error(error: OSError) -> None:
+        inspect_errors.append(str(error))
+
     try:
         parent_fd = _open_file_parent(root, entry.path)
         try:
@@ -781,17 +807,24 @@ def _sample_file_entry(root: Path, entry: _JournalEntry) -> _FileSample:
                     break
                 digest.update(chunk)
         except OSError as error:
-            inspect_error = error
+            record_inspect_error(error)
         try:
             if file_fd is not None:
                 fd_post = _secure_call("fstat published contract after read", os.fstat, file_fd)
+        except OSError as error:
+            record_inspect_error(error)
+        try:
             path_post = _stat_at(parent_fd, entry.path.name)
         except OSError as error:
-            inspect_error = inspect_error or error
-        owned = _identity_matches(entry, path_post)
+            record_inspect_error(error)
+        owned = (
+            _identity_matches(entry, path_post)
+            if path_post is not None
+            else any(_identity_matches(entry, info) for info in (path_pre, fd_pre))
+        )
         infos = (path_pre, fd_pre, fd_post, path_post)
         published = (
-            inspect_error is None
+            not inspect_errors
             and all(_identity_matches(entry, info) for info in infos)
             and all(
                 stat.S_IMODE(info.st_mode) == _PUBLISHED_MODE and info.st_size == entry.expected_size
@@ -801,7 +834,7 @@ def _sample_file_entry(root: Path, entry: _JournalEntry) -> _FileSample:
             and len({_published_signature(info) for info in infos if info is not None}) == 1
             and digest.hexdigest() == entry.expected_sha256
         )
-        return _FileSample(owned, published, str(inspect_error) if inspect_error else None)
+        return _FileSample(owned, published, "; ".join(inspect_errors) or None)
     except OSError as error:
         return _FileSample(False, False, str(error))
     finally:
@@ -828,15 +861,41 @@ def _partition_file_entries(root: Path, entries: list[_JournalEntry]) -> _FilePa
     return _FilePartition(tuple(published), tuple(owned), tuple(nonpublished))
 
 
+def _is_incomplete_sentinel(root: Path, path: Path) -> bool:
+    """Return true only for a currently observable regular mode-000 path."""
+
+    parent_fd: int | None = None
+    try:
+        parent_fd = _open_file_parent(root, path)
+        info = _stat_at(parent_fd, path.name)
+        return stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == _INCOMPLETE_MODE
+    except OSError:
+        return False
+    finally:
+        if parent_fd is not None:
+            os.close(parent_fd)
+
+
+def _durability_paths(journal: _BootstrapJournal, partition: _FilePartition) -> list[Path]:
+    """Retain durability evidence only where its original subject is still truthful."""
+
+    tokenized_paths = {entry.path for entry in journal.file_entries}
+    paths: list[Path] = []
+    for path in journal.durability_uncertain_file_paths:
+        if path in tokenized_paths:
+            if path in partition.owned:
+                paths.append(path)
+        elif path in journal.uncertain_file_paths and _is_incomplete_sentinel(journal.root, path):
+            paths.append(path)
+    paths.extend(journal.durability_uncertain_directory_paths)
+    return list(dict.fromkeys(paths))
+
+
 def _publication_failure(error: BaseException, journal: _BootstrapJournal) -> BootstrapWriteError:
     """Sample evidence without mutating any path after a failed publication."""
 
     partition = _partition_file_entries(journal.root, journal.file_entries)
-    durability_paths = [
-        path
-        for path in journal.durability_uncertain_paths
-        if path in journal.uncertain_paths or path in partition.owned
-    ]
+    durability_paths = _durability_paths(journal, partition)
     error_number = error.errno if isinstance(error, OSError) else None
     return BootstrapWriteError(
         "content-contract publication failed; no cleanup was attempted",
@@ -917,7 +976,7 @@ def init_domain_content_contracts(
     _before_final_contract_verification(root)
     partition = _partition_file_entries(root, journal.file_entries)
     if partition.nonpublished:
-        durability_paths = [path for path in journal.durability_uncertain_paths if path in partition.owned]
+        durability_paths = _durability_paths(journal, partition)
         raise BootstrapWriteError(
             "content-contract publication failed final token verification; no cleanup was attempted",
             list(partition.owned),

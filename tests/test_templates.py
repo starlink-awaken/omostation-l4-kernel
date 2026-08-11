@@ -417,6 +417,102 @@ class TestInitDomainKems:
         assert manifest in raised.value.residual_paths
         assert manifest in raised.value.uncertain_paths
 
+    def test_fd_post_fstat_eio_keeps_owned_entry_as_residual_and_uncertain(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        manifest = root / "DOMAIN.yaml"
+        original_fstat = templates.os.fstat
+        sampling = False
+        sample_fstats = 0
+
+        def begin_final_sample(_root):
+            nonlocal sampling
+            sampling = True
+
+        def fail_domain_fd_post(fd):
+            nonlocal sample_fstats
+            if sampling:
+                sample_fstats += 1
+                if sample_fstats == 2:
+                    raise OSError(errno.EIO, "simulated post-read fstat failure")
+            return original_fstat(fd)
+
+        monkeypatch.setattr(templates, "_before_final_contract_verification", begin_final_sample)
+        monkeypatch.setattr(templates.os, "fstat", fail_domain_fd_post)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert manifest in raised.value.residual_paths
+        assert manifest in raised.value.uncertain_paths
+
+    def test_path_post_stat_eio_keeps_prior_owned_entry_as_residual_and_uncertain(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        manifest = root / "DOMAIN.yaml"
+        original_stat_at = templates._stat_at
+        sampling = False
+        manifest_stats = 0
+
+        def begin_final_sample(_root):
+            nonlocal sampling
+            sampling = True
+
+        def fail_domain_path_post(parent_fd, name):
+            nonlocal manifest_stats
+            if sampling and name == "DOMAIN.yaml":
+                manifest_stats += 1
+                if manifest_stats == 2:
+                    raise OSError(errno.EIO, "simulated post-read path stat failure")
+            return original_stat_at(parent_fd, name)
+
+        monkeypatch.setattr(templates, "_before_final_contract_verification", begin_final_sample)
+        monkeypatch.setattr(templates, "_stat_at", fail_domain_path_post)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert manifest in raised.value.residual_paths
+        assert manifest in raised.value.uncertain_paths
+
+    def test_content_fsync_caller_replacement_does_not_inherit_token_durability(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        manifest = root / "DOMAIN.yaml"
+        original_fsync = templates._fsync_fd
+
+        def replace_then_fail(fd, operation):
+            if operation == "fsync contract file content":
+                replacement = root / "caller-manifest.tmp"
+                replacement.write_text("caller replacement\n", encoding="utf-8")
+                replacement.replace(manifest)
+                raise OSError(errno.EIO, "caller replaced contract before content fsync")
+            return original_fsync(fd, operation)
+
+        monkeypatch.setattr(templates, "_fsync_fd", replace_then_fail)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert manifest.read_text(encoding="utf-8") == "caller replacement\n"
+        assert manifest not in raised.value.residual_paths
+        assert manifest in raised.value.uncertain_paths
+        assert manifest not in raised.value.durability_uncertain_paths
+
+    def test_directory_fsync_failure_retains_directory_durability_evidence(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        original_fsync = templates._fsync_fd
+
+        def fail_directory_fsync(fd, operation):
+            if operation == "fsync directory creation":
+                raise OSError(errno.EIO, "directory durability unknown")
+            return original_fsync(fd, operation)
+
+        monkeypatch.setattr(templates, "_fsync_fd", fail_directory_fsync)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert raised.value.uncertain_paths == (root,)
+        assert raised.value.durability_uncertain_paths == (root,)
+
     def test_write_time_sentinel_after_preflight_fails_closed_with_prior_residual(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"
         method = root / "Method.md"
