@@ -306,7 +306,7 @@ def test_domain_init_content_contracts_rejects_traversal_in_authoritative_domain
     assert not root.exists()
 
 
-def test_domain_init_content_contracts_rolls_back_on_method_permission_error(tmp_path, monkeypatch, capsys) -> None:
+def test_domain_init_content_contracts_reports_publication_evidence_on_method_permission_error(tmp_path, monkeypatch, capsys) -> None:
     root = tmp_path / "domain"
     original_write = templates._write_contract
 
@@ -331,7 +331,10 @@ def test_domain_init_content_contracts_rolls_back_on_method_permission_error(tmp
 
     assert code == 2
     assert payload["error"]["code"] == "L4-CONFIG-002"
-    assert not root.exists()
+    assert payload["error"]["residual_paths"] == [str(root / "DOMAIN.yaml")]
+    assert payload["error"]["uncertain_paths"] == [str(root)]
+    assert payload["error"]["recovery"]["code"] == "L4-PUBLICATION-RECOVERY-001"
+    assert (root / "DOMAIN.yaml").exists()
 
 
 def test_content_audit_json_reports_invalid_archive_with_stable_code(tmp_path, monkeypatch, capsys) -> None:

@@ -88,6 +88,25 @@ class TestDomainCreate:
         assert result["status"] == "error"
         assert sorted(path.name for path in root.iterdir()) == ["DOMAIN.yaml"]
 
+    def test_create_exposes_non_destructive_publication_evidence(self, lifecycle, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        original_write = templates._write_contract
+
+        def fail_method(path, content, journal):
+            if path.name == "Method.md":
+                raise PermissionError("stop publication")
+            return original_write(path, content, journal)
+
+        monkeypatch.setattr(templates, "_write_contract", fail_method)
+
+        result = lifecycle.create("publication-id", "声明式域", "document", root, owner="trusted-owner")
+
+        assert result["status"] == "error"
+        assert "publication failed" in result["message"]
+        assert result["residual_paths"] == [str(root / "DOMAIN.yaml")]
+        assert result["uncertain_paths"] == [str(root)]
+        assert result["recovery"]["code"] == "L4-PUBLICATION-RECOVERY-001"
+
     def test_create_dry_run(self, lifecycle):
         result = lifecycle.create("dry", "测试", "document", "/tmp/test-dry", dry_run=True)
         assert result["status"] == "dry_run"
@@ -252,10 +271,10 @@ class TestDomainMigrate:
         assert result["changes"] == []
         assert list(external.iterdir()) == []
 
-    def test_migrate_write_error_reports_no_changes_when_rollback_is_clean(self, lifecycle, tmp_path, monkeypatch):
+    def test_migrate_write_error_reports_no_changes_without_published_file(self, lifecycle, tmp_path, monkeypatch):
         root = tmp_path / "domain"
-        write_domain_manifest(root, "rollback-id", "trusted-owner")
-        lifecycle.registry.register(Domain("rollback-id", "rollback-id", "document", root, "bos://rollback-id/**"))
+        write_domain_manifest(root, "publication-id", "trusted-owner")
+        lifecycle.registry.register(Domain("publication-id", "publication-id", "document", root, "bos://publication-id/**"))
         original_write = templates._write_contract
 
         def fail_method(path, content, created):
@@ -265,7 +284,7 @@ class TestDomainMigrate:
 
         monkeypatch.setattr(templates, "_write_contract", fail_method)
 
-        result = lifecycle.migrate("rollback-id")
+        result = lifecycle.migrate("publication-id")
 
         assert result["status"] == "error"
         assert result["changes"] == []

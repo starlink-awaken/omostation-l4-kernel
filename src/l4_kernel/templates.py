@@ -373,10 +373,24 @@ _DIRECTORY_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_
 
 
 class BootstrapWriteError(OSError):
-    """A failed bootstrap whose rollback left auditable residual paths."""
+    """A non-destructive failed publication with machine-readable evidence."""
 
-    def __init__(self, message: str, residual_paths: list[Path], error_number: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        residual_paths: list[Path],
+        *,
+        uncertain_paths: list[Path] | None = None,
+        durability_uncertain_paths: list[Path] | None = None,
+        error_number: int | None = None,
+    ) -> None:
         self.residual_paths = tuple(residual_paths)
+        self.uncertain_paths = tuple(uncertain_paths or [])
+        self.durability_uncertain_paths = tuple(durability_uncertain_paths or [])
+        self.recovery = {
+            "code": "L4-PUBLICATION-RECOVERY-001",
+            "action": "inspect evidence; remove only confirmed residual files before retrying",
+        }
         super().__init__(error_number or errno.EIO, message)
 
 
@@ -385,30 +399,43 @@ class _JournalEntry:
     """A created path together with the inode identity owned by this invocation."""
 
     path: Path
-    kind: str
     st_dev: int
     st_ino: int
 
 
 class _BootstrapJournal:
-    """Track only entries this bootstrap can prove it created."""
+    """Track file tokens plus non-claiming directory/durability observations."""
 
     def __init__(self, root: Path) -> None:
         self.root = root
-        self.entries: list[_JournalEntry] = []
-        self.unconfirmed_paths: list[Path] = []
+        self.file_entries: list[_JournalEntry] = []
+        self.uncertain_paths: list[Path] = []
+        self.durability_uncertain_paths: list[Path] = []
 
     @property
     def created_files(self) -> list[Path]:
-        return [entry.path for entry in self.entries if entry.kind == "file"]
+        return [entry.path for entry in self.file_entries]
 
-    def record_unconfirmed(self, path: Path) -> None:
-        if path not in self.unconfirmed_paths:
-            self.unconfirmed_paths.append(path)
+    @staticmethod
+    def _record(paths: list[Path], path: Path) -> None:
+        if path not in paths:
+            paths.append(path)
+
+    def record_uncertain(self, path: Path) -> None:
+        self._record(self.uncertain_paths, path)
+
+    def record_durability_uncertain(self, path: Path) -> None:
+        self._record(self.durability_uncertain_paths, path)
 
 
 def _before_contract_publication(root: Path) -> None:
     """Publication seam; each actual write still reopens paths with no-follow semantics."""
+
+    del root
+
+
+def _before_final_contract_verification(root: Path) -> None:
+    """Test seam; success still depends on the following read-only token verification."""
 
     del root
 
@@ -497,12 +524,12 @@ def _secure_call(operation: str, function: Any, /, *args: Any, **kwargs: Any) ->
 
 def _require_secure_publication_platform() -> None:
     required_flags = ("O_NOFOLLOW", "O_DIRECTORY", "O_EXCL")
-    required_functions = ("open", "mkdir", "stat", "unlink", "rmdir", "fsync", "fstat", "fchmod", "write")
+    required_functions = ("open", "mkdir", "stat", "fsync", "fstat", "fchmod", "write")
     if any(not hasattr(os, flag) for flag in required_flags) or any(not hasattr(os, name) for name in required_functions):
         raise _unsupported_platform("required flags or filesystem functions")
 
     supports_dir_fd = getattr(os, "supports_dir_fd", set())
-    required_dir_fd = (os.open, os.mkdir, os.stat, os.unlink, os.rmdir)
+    required_dir_fd = (os.open, os.mkdir, os.stat)
     if any(function not in supports_dir_fd for function in required_dir_fd):
         raise _unsupported_platform("dir_fd filesystem operations")
     if os.stat not in getattr(os, "supports_follow_symlinks", set()):
@@ -525,38 +552,36 @@ def _fsync_fd(fd: int, operation: str) -> None:
     _secure_call(operation, os.fsync, fd)
 
 
-def _append_entry(journal: _BootstrapJournal, path: Path, kind: str, info: os.stat_result) -> None:
-    matches_kind = stat.S_ISREG(info.st_mode) if kind == "file" else stat.S_ISDIR(info.st_mode)
-    if not matches_kind:
-        journal.record_unconfirmed(path)
-        raise OSError(errno.EIO, f"created {kind} changed before ownership could be recorded: {path}")
-    journal.entries.append(_JournalEntry(path, kind, info.st_dev, info.st_ino))
-
-
-def _record_created_directory(journal: _BootstrapJournal, parent_fd: int, path: Path) -> None:
-    try:
-        _append_entry(journal, path, "directory", _stat_at(parent_fd, path.name))
-    except OSError:
-        journal.record_unconfirmed(path)
-        raise
-
-
 def _record_created_file(journal: _BootstrapJournal, fd: int, path: Path) -> None:
     try:
-        _append_entry(journal, path, "file", _secure_call("fstat created file", os.fstat, fd))
+        info = _secure_call("fstat created file", os.fstat, fd)
     except OSError:
-        journal.record_unconfirmed(path)
+        journal.record_uncertain(path)
         raise
+    if not stat.S_ISREG(info.st_mode):
+        journal.record_uncertain(path)
+        raise OSError(errno.EIO, f"created file changed before ownership could be recorded: {path}")
+    journal.file_entries.append(_JournalEntry(path, info.st_dev, info.st_ino))
 
 
-def _create_directory(journal: _BootstrapJournal, parent_fd: int, parent: Path, name: str) -> bool:
-    """Create and journal a directory before any reopen can observe it."""
+def _after_directory_creation(path: Path) -> None:
+    """Test seam: directory names are deliberately never treated as deletable ownership."""
+
+    del path
+
+
+def _create_directory(journal: _BootstrapJournal, parent_fd: int, parent: Path, name: str) -> None:
+    """Create a directory and retain only non-claiming evidence of that action."""
 
     path = parent / name
     _secure_call("mkdir at", os.mkdir, name, mode=0o755, dir_fd=parent_fd)
-    _record_created_directory(journal, parent_fd, path)
-    _fsync_fd(parent_fd, "fsync directory creation")
-    return True
+    journal.record_uncertain(path)
+    try:
+        _fsync_fd(parent_fd, "fsync directory creation")
+    except OSError:
+        journal.record_durability_uncertain(path)
+        raise
+    _after_directory_creation(path)
 
 
 def _open_root(journal: _BootstrapJournal) -> int:
@@ -625,18 +650,26 @@ def _write_contract(path: Path, content: str, journal: _BootstrapJournal) -> Non
         )
         try:
             _record_created_file(journal, fd, path)
-            _secure_call("set contract mode", os.fchmod, fd, 0o644)
-            payload = content.encode("utf-8")
-            written = 0
-            while written < len(payload):
-                count = _secure_call("write contract file", os.write, fd, payload[written:])
-                if count == 0:
-                    raise OSError("short write while publishing content contract")
-                written += count
-            _fsync_fd(fd, "fsync contract file")
+            try:
+                _secure_call("set contract mode", os.fchmod, fd, 0o644)
+                payload = content.encode("utf-8")
+                written = 0
+                while written < len(payload):
+                    count = _secure_call("write contract file", os.write, fd, payload[written:])
+                    if count == 0:
+                        raise OSError("short write while publishing content contract")
+                    written += count
+                _fsync_fd(fd, "fsync contract file")
+            except OSError:
+                journal.record_durability_uncertain(path)
+                raise
         finally:
             os.close(fd)
-        _fsync_fd(parent_fd, "fsync contract directory entry")
+        try:
+            _fsync_fd(parent_fd, "fsync contract directory entry")
+        except OSError:
+            journal.record_durability_uncertain(path)
+            raise
     finally:
         if parent_fd is not None:
             os.close(parent_fd)
@@ -657,58 +690,59 @@ def _open_existing_parent(root_fd: int, root: Path, target: Path) -> int:
         raise
 
 
-def _open_entry_parent(root: Path, path: Path) -> tuple[int, str]:
-    if path == root:
-        return _open_directory(root.parent), root.name
+def _open_file_parent(root: Path, path: Path) -> int:
     root_fd = _open_directory(root)
-    return _open_existing_parent(root_fd, root, path), path.name
+    return _open_existing_parent(root_fd, root, path)
 
 
-def _entry_matches(entry: _JournalEntry, info: os.stat_result) -> bool:
-    correct_kind = stat.S_ISREG(info.st_mode) if entry.kind == "file" else stat.S_ISDIR(info.st_mode)
-    return correct_kind and info.st_dev == entry.st_dev and info.st_ino == entry.st_ino
-
-
-def _remove_owned_entry(root: Path, entry: _JournalEntry) -> str:
-    """Delete only a path which still names the exact inode we recorded."""
-
+def _file_entry_matches(root: Path, entry: _JournalEntry) -> bool:
     parent_fd: int | None = None
     try:
-        parent_fd, name = _open_entry_parent(root, entry.path)
-        try:
-            current = _stat_at(parent_fd, name)
-        except FileNotFoundError:
-            return "missing"
-        if not _entry_matches(entry, current):
-            return "residual"
-        if entry.kind == "directory":
-            _secure_call("remove created directory", os.rmdir, name, dir_fd=parent_fd)
-        else:
-            _secure_call("remove created file", os.unlink, name, dir_fd=parent_fd)
-        _fsync_fd(parent_fd, "fsync rollback directory entry")
-        return "removed"
-    except FileNotFoundError:
-        return "missing"
+        parent_fd = _open_file_parent(root, entry.path)
+        info = _stat_at(parent_fd, entry.path.name)
+        return stat.S_ISREG(info.st_mode) and info.st_dev == entry.st_dev and info.st_ino == entry.st_ino
     except OSError:
-        return "residual"
+        return False
     finally:
         if parent_fd is not None:
             os.close(parent_fd)
 
 
-def _rollback(journal: _BootstrapJournal) -> list[Path]:
-    """Undo only this transaction's entries, reporting any protected residuals."""
+_KNOWN_INCOMPLETE_FILES: dict[Path, _JournalEntry] = {}
 
-    residuals: list[Path] = list(journal.unconfirmed_paths)
-    files = [entry for entry in journal.entries if entry.kind == "file"]
-    directories = [entry for entry in journal.entries if entry.kind == "directory"]
-    for entry in reversed(files):
-        if _remove_owned_entry(journal.root, entry) == "residual" and entry.path not in residuals:
-            residuals.append(entry.path)
-    for entry in sorted(directories, key=lambda item: len(item.path.parts), reverse=True):
-        if _remove_owned_entry(journal.root, entry) == "residual" and entry.path not in residuals:
-            residuals.append(entry.path)
-    return residuals
+
+def _check_known_incomplete_files(root: Path) -> None:
+    """Reject a retry only while its known incomplete file still has the same token."""
+
+    for path, entry in tuple(_KNOWN_INCOMPLETE_FILES.items()):
+        if _file_entry_matches(root, entry):
+            raise BootstrapWriteError(
+                "publication failed previously; confirmed residual requires recovery before retry",
+                [path],
+            )
+        del _KNOWN_INCOMPLETE_FILES[path]
+
+
+def _publication_failure(error: BaseException, journal: _BootstrapJournal) -> BootstrapWriteError:
+    """Sample evidence without mutating any path after a failed publication."""
+
+    residual_paths = [entry.path for entry in journal.file_entries if _file_entry_matches(journal.root, entry)]
+    for entry in journal.file_entries:
+        if entry.path in journal.durability_uncertain_paths and entry.path in residual_paths:
+            _KNOWN_INCOMPLETE_FILES[entry.path] = entry
+    durability_paths = [
+        path
+        for path in journal.durability_uncertain_paths
+        if path in journal.uncertain_paths or path in residual_paths
+    ]
+    error_number = error.errno if isinstance(error, OSError) else None
+    return BootstrapWriteError(
+        "content-contract publication failed; no cleanup was attempted",
+        residual_paths,
+        uncertain_paths=journal.uncertain_paths,
+        durability_uncertain_paths=durability_paths,
+        error_number=error_number,
+    )
 
 
 def init_domain_content_contracts(
@@ -729,6 +763,7 @@ def init_domain_content_contracts(
     domain_name = _validate_text(domain_name, "domain name")
     owner = _validate_text(owner, "owner")
     _require_secure_publication_platform()
+    _check_known_incomplete_files(root)
     targets = _preflight_contract_paths(root)
     _verify_existing_manifest(root, domain_id, domain_name, owner)
 
@@ -774,14 +809,18 @@ def init_domain_content_contracts(
         ):
             raise ContractError("L4-CONTRACT-001", "generated DOMAIN.yaml identity mismatch", root / "DOMAIN.yaml")
     except (ContractError, OSError, ValueError) as error:
-        residuals = _rollback(journal)
-        if residuals:
-            rendered = ", ".join(str(path) for path in residuals)
-            error_number = error.errno if isinstance(error, OSError) else None
-            raise BootstrapWriteError(
-                f"bootstrap rollback left residual paths: {rendered}", residuals, error_number
-            ) from None
+        if journal.file_entries or journal.uncertain_paths:
+            raise _publication_failure(error, journal) from None
         raise
+    _before_final_contract_verification(root)
+    changed = [entry.path for entry in journal.file_entries if not _file_entry_matches(root, entry)]
+    if changed:
+        raise BootstrapWriteError(
+            "content-contract publication failed final token verification; no cleanup was attempted",
+            [],
+            uncertain_paths=[*journal.uncertain_paths, *changed],
+            durability_uncertain_paths=journal.durability_uncertain_paths,
+        )
     return journal.created_files
 
 

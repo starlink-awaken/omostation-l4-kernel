@@ -455,6 +455,9 @@ def cmd_domain_init_content_contracts(args: list[str]) -> int:
                 "message": str(error),
                 "path": str(root),
                 "residual_paths": [str(path) for path in error.residual_paths],
+                "uncertain_paths": [str(path) for path in error.uncertain_paths],
+                "durability_uncertain_paths": [str(path) for path in error.durability_uncertain_paths],
+                "recovery": error.recovery,
             }
         )
         return 2

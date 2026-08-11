@@ -126,9 +126,12 @@ class DomainLifecycle:
             except BootstrapWriteError as error:
                 return {
                     "status": "error",
-                    "message": f"Domain '{domain_id}' creation rolled back: {error}",
+                    "message": f"Domain '{domain_id}' content-contract publication failed: {error}",
                     "created_files": [],
                     "residual_paths": [str(item) for item in error.residual_paths],
+                    "uncertain_paths": [str(item) for item in error.uncertain_paths],
+                    "durability_uncertain_paths": [str(item) for item in error.durability_uncertain_paths],
+                    "recovery": error.recovery,
                 }
             except (ContractError, OSError, ValueError) as error:
                 return {"status": "error", "message": f"Domain '{domain_id}' creation refused: {error}", "created_files": []}
@@ -317,7 +320,14 @@ class DomainLifecycle:
                     owner=manifest.principal_ref,
                 )
             except BootstrapWriteError as error:
-                return self._migration_error(domain_id, str(error), list(error.residual_paths))
+                return self._migration_error(
+                    domain_id,
+                    str(error),
+                    list(error.residual_paths),
+                    list(error.uncertain_paths),
+                    list(error.durability_uncertain_paths),
+                    error.recovery,
+                )
             except (ContractError, OSError, ValueError) as error:
                 return self._migration_error(domain_id, str(error))
             changes = [f"created content contract: {path.relative_to(domain.path.resolve()).as_posix()}" for path in created_files]
@@ -346,13 +356,23 @@ class DomainLifecycle:
         }
 
     @staticmethod
-    def _migration_error(domain_id: str, message: str, residual_paths: list[Path] | None = None) -> dict:
-        changes = [f"residual content contract: {path}" for path in residual_paths or []]
+    def _migration_error(
+        domain_id: str,
+        message: str,
+        residual_paths: list[Path] | None = None,
+        uncertain_paths: list[Path] | None = None,
+        durability_uncertain_paths: list[Path] | None = None,
+        recovery: dict | None = None,
+    ) -> dict:
+        changes = [f"publication residual: {path}" for path in residual_paths or []]
         return {
             "status": "error",
-            "message": f"Domain '{domain_id}' migration refused: {message}",
+            "message": f"Domain '{domain_id}' migration publication failed: {message}",
             "changes": changes,
             "residual_paths": [str(path) for path in residual_paths or []],
+            "uncertain_paths": [str(path) for path in uncertain_paths or []],
+            "durability_uncertain_paths": [str(path) for path in durability_uncertain_paths or []],
+            "recovery": recovery,
             "deprecation": {
                 "code": "L4-DEPRECATION-001",
                 "replacement": "l4-kernel domain init-content-contracts",

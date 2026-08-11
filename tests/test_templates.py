@@ -76,7 +76,7 @@ class TestInitDomainKems:
         assert "_storage" not in ontology
         assert "DOMAIN.yaml" in ontology
 
-    def test_write_failure_rolls_back_all_new_contract_files_and_directories(self, tmp_path, monkeypatch):
+    def test_write_failure_reports_non_destructive_publication_evidence(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"
         original_write = templates._write_contract
 
@@ -87,12 +87,14 @@ class TestInitDomainKems:
 
         monkeypatch.setattr(templates, "_write_contract", fail_method)
 
-        with pytest.raises(PermissionError):
+        with pytest.raises(templates.BootstrapWriteError) as raised:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
-        assert not root.exists()
+        assert raised.value.residual_paths == (root / "DOMAIN.yaml",)
+        assert raised.value.uncertain_paths == (root,)
+        assert (root / "DOMAIN.yaml").exists()
 
-    def test_publication_rechecks_parent_after_preflight_and_rolls_back(self, tmp_path, monkeypatch):
+    def test_publication_rechecks_parent_after_preflight_without_cleanup(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"
         profiles = root / "profiles"
         external = tmp_path / "external"
@@ -106,12 +108,13 @@ class TestInitDomainKems:
 
         monkeypatch.setattr(templates, "_before_contract_publication", swap_profiles_after_preflight, raising=False)
 
-        with pytest.raises(OSError):
+        with pytest.raises(templates.BootstrapWriteError) as raised:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
         assert list(external.iterdir()) == []
-        assert not (root / "DOMAIN.yaml").exists()
-        assert not (root / "Method.md").exists()
+        assert raised.value.residual_paths == (root / "DOMAIN.yaml", root / "Method.md")
+        assert (root / "DOMAIN.yaml").exists()
+        assert (root / "Method.md").exists()
 
     def test_rollback_never_deletes_a_concurrently_replaced_contract(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"
@@ -132,24 +135,26 @@ class TestInitDomainKems:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
         assert (root / "DOMAIN.yaml").read_text(encoding="utf-8") == "replacement must survive\n"
-        assert raised.value.residual_paths == (root / "DOMAIN.yaml",)
+        assert raised.value.residual_paths == ()
 
-    def test_directory_reopen_failure_rolls_back_its_owned_directory(self, tmp_path, monkeypatch):
+    def test_directory_reopen_failure_reports_directory_uncertainty(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"
         root.mkdir()
         original_open = templates._open_directory_at
 
         def fail_profiles_reopen(parent_fd, name):
-            if name == "profiles":
+            if name == "profiles" and (root / "profiles").exists():
                 raise PermissionError("cannot reopen profiles")
             return original_open(parent_fd, name)
 
         monkeypatch.setattr(templates, "_open_directory_at", fail_profiles_reopen, raising=False)
 
-        with pytest.raises(PermissionError):
+        with pytest.raises(templates.BootstrapWriteError) as raised:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
-        assert list(root.iterdir()) == []
+        assert raised.value.residual_paths == (root / "DOMAIN.yaml", root / "Method.md")
+        assert raised.value.uncertain_paths == (root / "profiles",)
+        assert (root / "profiles").is_dir()
 
     def test_unsupported_secure_publication_platform_fails_closed(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"
@@ -161,7 +166,7 @@ class TestInitDomainKems:
         assert raised.value.errno == errno.ENOTSUP
         assert not root.exists()
 
-    def test_file_fsync_failure_uses_the_same_safe_rollback(self, tmp_path, monkeypatch):
+    def test_file_fsync_failure_reports_residual_and_recovery(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"
         original_fsync = templates._fsync_fd
 
@@ -172,10 +177,13 @@ class TestInitDomainKems:
 
         monkeypatch.setattr(templates, "_fsync_fd", fail_file_fsync)
 
-        with pytest.raises(OSError, match="durability failure"):
+        with pytest.raises(templates.BootstrapWriteError) as raised:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
-        assert not root.exists()
+        assert raised.value.residual_paths == (root / "DOMAIN.yaml",)
+        assert raised.value.durability_uncertain_paths == (root / "DOMAIN.yaml",)
+        assert raised.value.recovery["code"] == "L4-PUBLICATION-RECOVERY-001"
+        assert (root / "DOMAIN.yaml").exists()
 
     def test_platform_not_implemented_error_is_reported_as_enotsup(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"
@@ -189,8 +197,110 @@ class TestInitDomainKems:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
         assert raised.value.errno == errno.ENOTSUP
-        assert raised.value.residual_paths == (root,)
-        assert not root.exists()
+        assert raised.value.residual_paths == ()
+        assert raised.value.uncertain_paths == (root,)
+        assert raised.value.durability_uncertain_paths == (root,)
+        assert root.exists()
+
+    def test_no_failure_path_invokes_destructive_cleanup(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        original_write = templates._write_contract
+
+        def fail_method(path, content, journal):
+            if path.name == "Method.md":
+                raise PermissionError("stop publication")
+            return original_write(path, content, journal)
+
+        def destructive_call(*_args, **_kwargs):
+            raise AssertionError("bootstrap must never delete during failure handling")
+
+        monkeypatch.setattr(templates, "_write_contract", fail_method)
+        monkeypatch.setattr(templates.os, "unlink", destructive_call)
+        monkeypatch.setattr(templates.os, "rmdir", destructive_call)
+
+        with pytest.raises(templates.BootstrapWriteError):
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert (root / "DOMAIN.yaml").exists()
+
+    def test_partial_write_requires_manual_recovery_before_retry(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        original_write = templates.os.write
+
+        def short_write(_fd, _payload):
+            return 0
+
+        monkeypatch.setattr(templates.os, "write", short_write)
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert raised.value.residual_paths == (root / "DOMAIN.yaml",)
+        assert raised.value.recovery["action"].startswith("inspect evidence")
+        monkeypatch.setattr(templates.os, "write", original_write)
+
+        with pytest.raises(templates.BootstrapWriteError, match="requires recovery"):
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        (root / "DOMAIN.yaml").unlink()
+        created = init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert root / "DOMAIN.yaml" in created
+
+    def test_directory_name_replaced_after_mkdir_is_preserved_as_uncertain(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        root.mkdir()
+        profiles = root / "profiles"
+
+        def replace_profiles(path):
+            if path == profiles:
+                profiles.rmdir()
+                profiles.write_text("caller replacement\n", encoding="utf-8")
+
+        monkeypatch.setattr(templates, "_after_directory_creation", replace_profiles)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert profiles.read_text(encoding="utf-8") == "caller replacement\n"
+        assert profiles in raised.value.uncertain_paths
+
+    def test_final_token_verification_rejects_concurrent_file_replacement(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        method = root / "Method.md"
+
+        def replace_method(_root):
+            replacement = root / "caller-method.tmp"
+            replacement.write_text("caller replacement\n", encoding="utf-8")
+            replacement.replace(method)
+
+        monkeypatch.setattr(templates, "_before_final_contract_verification", replace_method)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert method.read_text(encoding="utf-8") == "caller replacement\n"
+        assert method not in raised.value.residual_paths
+        assert method in raised.value.uncertain_paths
+
+    def test_failed_publication_does_not_leak_file_descriptors(self, tmp_path, monkeypatch):
+        fd_directory = Path("/dev/fd")
+        if not fd_directory.is_dir():
+            pytest.skip("platform does not expose process file descriptors")
+        root = tmp_path / "domain"
+        original_write = templates._write_contract
+
+        def fail_method(path, content, journal):
+            if path.name == "Method.md":
+                raise PermissionError("stop publication")
+            return original_write(path, content, journal)
+
+        monkeypatch.setattr(templates, "_write_contract", fail_method)
+        before = len(list(fd_directory.iterdir()))
+
+        with pytest.raises(templates.BootstrapWriteError):
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert len(list(fd_directory.iterdir())) == before
 
 
 class TestKemsValidator:
