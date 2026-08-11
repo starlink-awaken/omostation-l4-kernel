@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from yaml.nodes import MappingNode, ScalarNode
 
+from l4_kernel.content_plane import audit_content_plane
 from l4_kernel.contracts import DomainHealth, DomainManifest, ValidationIssue, ValidationResult
 from l4_kernel.harness_profiles import GATES, PROFILE_GATES
 from l4_kernel.path_policy import PathPolicyError, resolve_within
@@ -312,6 +313,33 @@ class HarnessRunner:
             issues.append(HarnessRunner._policy_issue(manifest, "private-core sensitivity must be private or stronger"))
         if manifest.archetype in {"projection", "federation"} and manifest.authority_policy == "canonical_write":
             issues.append(HarnessRunner._policy_issue(manifest, f"{manifest.archetype} forbids canonical_write"))
+        return tuple(issues)
+
+    @staticmethod
+    def _gate_t8(manifest: DomainManifest) -> tuple[ValidationIssue, ...]:
+        if not manifest.root.is_dir():
+            return (
+                ValidationIssue(
+                    code="L4-ROOT-000",
+                    severity="error",
+                    message="content-plane root does not exist or is not a directory",
+                    path=manifest.root,
+                    gate="T8",
+                ),
+            )
+        issues: list[ValidationIssue] = []
+        for artifact in audit_content_plane(manifest.root).artifacts:
+            if artifact.kind not in {"runtime", "cache", "projection"}:
+                continue
+            issues.append(
+                ValidationIssue(
+                    code=artifact.code or "L4-CONTENT-008",
+                    severity="warning" if artifact.kind == "projection" else "error",
+                    message=f"{artifact.reason}: {artifact.relative_path}",
+                    path=artifact.path,
+                    gate="T8",
+                )
+            )
         return tuple(issues)
 
     @staticmethod

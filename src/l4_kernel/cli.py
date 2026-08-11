@@ -18,10 +18,12 @@ from typing import Any
 from l4_kernel import DomainRegistry
 from l4_kernel.config_loader import load_overrides_from_config, resolve_registry_path
 from l4_kernel.consistency import check_consistency
+from l4_kernel.content_plane import audit_content_plane
 from l4_kernel.contracts import ContractError, load_domain_manifest
 from l4_kernel.harness import HarnessRunner
 from l4_kernel.harness_profiles import PROFILE_GATES
 from l4_kernel.manifest_registry import ManifestRegistry
+from l4_kernel.path_policy import legacy_execution_denied
 from l4_kernel.skill_loader import (
     domain_capabilities_summary,
     domain_skills_dir,
@@ -29,7 +31,6 @@ from l4_kernel.skill_loader import (
     find_skill,
     find_workflow,
 )
-from l4_kernel.workflows import ScenarioEngine
 
 # 默认配置文件路径 (与 l4-kernel 同级目录)
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "l4_domain_paths.toml"
@@ -38,6 +39,10 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "l4_domain_paths.
 def _json_envelope(*, data: Any = None, error: dict[str, Any] | None = None) -> None:
     payload = {"ok": error is None, "data": data} if error is None else {"ok": False, "error": error}
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+
+
+def _json_data(data: Any, *, ok: bool) -> None:
+    print(json.dumps({"ok": ok, "data": data}, ensure_ascii=False, indent=2, default=str))
 
 
 def _contract_error(error: ContractError) -> dict[str, Any]:
@@ -89,10 +94,6 @@ def _get_registry(config_path: Path | None = None) -> DomainRegistry:
         return DomainRegistry.from_domains(_BUILTIN_DOMAINS)
 
     return ManifestRegistry.load(resolve_registry_path()).as_legacy_registry()
-
-
-def _get_engine(config_path: Path | None = None) -> ScenarioEngine:
-    return ScenarioEngine(_get_registry(config_path))
 
 
 def cmd_list(args: list[str]) -> int:
@@ -163,6 +164,9 @@ def cmd_skills(args: list[str]) -> int:
         return 1
 
     sub = args[0]
+    if sub == "run":
+        _json_envelope(error=legacy_execution_denied("skill.run")["error"])
+        return 1
     registry = _get_registry()
 
     if sub == "list":
@@ -199,21 +203,6 @@ def cmd_skills(args: list[str]) -> int:
         print()
         return 0
 
-    if sub == "run":
-        if len(args) < 3:
-            print("用法: l4-kernel skill run <domain_id> <skill_id> [key=val ...]", file=sys.stderr)
-            return 1
-        engine = _get_engine()
-        params = {}
-        for a in args[3:]:
-            if "=" in a:
-                k, v = a.split("=", 1)
-                params[k] = v
-        result = engine.run_skill(args[1], args[2], **params)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        print()
-        return 0 if result["status"] == "ok" else 1
-
     print(f"未知子命令: skill {sub}", file=sys.stderr)
     return 1
 
@@ -225,6 +214,9 @@ def cmd_workflows(args: list[str]) -> int:
         return 1
 
     sub = args[0]
+    if sub == "run":
+        _json_envelope(error=legacy_execution_denied("workflow.run")["error"])
+        return 1
     registry = _get_registry()
 
     if sub == "list":
@@ -260,21 +252,6 @@ def cmd_workflows(args: list[str]) -> int:
         print(json.dumps(wf, ensure_ascii=False, indent=2))
         print()
         return 0
-
-    if sub == "run":
-        if len(args) < 3:
-            print("用法: l4-kernel workflow run <domain_id> <workflow_id> [key=val ...]", file=sys.stderr)
-            return 1
-        engine = _get_engine()
-        params = {}
-        for a in args[3:]:
-            if "=" in a:
-                k, v = a.split("=", 1)
-                params[k] = v
-        result = engine.run_workflow(args[1], args[2], **params)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        print()
-        return 0 if result["status"] == "ok" else 1
 
     print(f"未知子命令: workflow {sub}", file=sys.stderr)
     return 1
@@ -395,6 +372,22 @@ def cmd_harness(args: list[str]) -> int:
     return 0 if health.ok else 1
 
 
+def cmd_content(args: list[str]) -> int:
+    """Audit one Documents root as a declarative content plane."""
+
+    if not args or args[0] != "audit" or len(args) < 2:
+        _json_envelope(error={"code": "L4-CONFIG-002", "message": "usage: content audit ROOT --json", "path": None})
+        return 2
+    root = Path(args[1]).expanduser()
+    try:
+        report = audit_content_plane(root)
+    except ValueError as error:
+        _json_envelope(error={"code": "L4-CONFIG-002", "message": str(error), "path": str(root)})
+        return 2
+    _json_data(report.to_dict(), ok=report.ok)
+    return 0 if report.ok else 1
+
+
 def main() -> int:
     """l4-kernel CLI 入口。"""
     args = sys.argv[1:]
@@ -411,6 +404,7 @@ def main() -> int:
         print("    contract validate PATH --json       校验 DomainManifest")
         print("    registry list --registry PATH --json 列出显式知识域")
         print("    harness run DOMAIN_ID --gates ...   运行只读确定性门禁")
+        print("    content audit ROOT --json           审计 Documents 内容面边界")
         print("    domain list/info ...                legacy 域视图")
         print("    skill list/show/run ...             legacy 技能入口")
         print("    workflow list/show/run ...          legacy 工作流入口")
@@ -429,6 +423,9 @@ def main() -> int:
 
     if cmd == "harness":
         return cmd_harness(args[1:])
+
+    if cmd == "content":
+        return cmd_content(args[1:])
 
     if cmd == "domain":
         sub = args[1] if len(args) > 1 else "list"

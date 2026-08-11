@@ -25,14 +25,18 @@ from l4_kernel.mcp_server import (
     l4_kems_validate,
     l4_memory_read,
     l4_plugin_actions,
+    l4_plugin_run_action,
+    l4_plugin_run_mechanism,
     l4_plugin_specs,
     l4_plugin_workflows,
     l4_search,
     l4_signal_emit,
     l4_signal_patterns,
     l4_signals_list,
+    l4_skill_run,
     l4_state_read,
     l4_status_read,
+    l4_workflow_run,
 )
 
 
@@ -78,6 +82,13 @@ class TestKemsTools:
     def test_status_read(self):
         result = json.loads(l4_status_read("vault"))
         assert isinstance(result, dict)
+
+    def test_legacy_skill_and_workflow_execution_fail_closed(self):
+        skill = json.loads(l4_skill_run("vault", "test/skill"))
+        workflow = json.loads(l4_workflow_run("vault", "test/workflow"))
+
+        assert skill["error"]["code"] == "L4-EXECUTION-012"
+        assert workflow["error"]["code"] == "L4-EXECUTION-012"
 
 
 class TestSearchTools:
@@ -131,6 +142,13 @@ class TestPluginTools:
         result = json.loads(l4_plugin_specs("document"))
         assert "SPEC-STATE" in result
         assert "SPEC-STATUS" in result
+
+    def test_legacy_plugin_execution_surfaces_fail_closed(self):
+        action = json.loads(l4_plugin_run_action("workspace", "file_search", "sharedwork"))
+        mechanism = json.loads(l4_plugin_run_mechanism("document", "freshness_auto_alert", "vault"))
+
+        assert action["error"]["code"] == "L4-EXECUTION-012"
+        assert mechanism["error"]["code"] == "L4-EXECUTION-012"
 
 
 class TestCardsTools:

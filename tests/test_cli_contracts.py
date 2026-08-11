@@ -143,4 +143,49 @@ def test_help_exposes_new_and_marks_old_surfaces_legacy(monkeypatch, capsys) -> 
     assert "contract validate" in output
     assert "registry list" in output
     assert "harness run" in output
+    assert "content audit" in output
     assert "legacy" in output.lower()
+
+
+def test_content_audit_json_fails_closed_on_runtime_artifact(tmp_path, monkeypatch, capsys) -> None:
+    script = tmp_path / "_runtime" / "run.py"
+    script.parent.mkdir()
+    script.write_text("print('x')", encoding="utf-8")
+
+    code, payload = invoke(monkeypatch, capsys, "content", "audit", str(tmp_path), "--json")
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert payload["data"]["counts"]["runtime"] == 1
+    assert payload["data"]["violations"][0]["code"] == "L4-CONTENT-008"
+
+
+def test_content_audit_json_accepts_contracts_and_content(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+    root.mkdir()
+    (root / "CLAUDE.md").write_text("# Constitution", encoding="utf-8")
+    (root / "note.md").write_text("# Knowledge", encoding="utf-8")
+
+    code, payload = invoke(monkeypatch, capsys, "content", "audit", str(root), "--json")
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["data"]["counts"] == {"content": 1, "contract": 1}
+
+
+def test_content_audit_rejects_missing_root(tmp_path, monkeypatch, capsys) -> None:
+    missing = tmp_path / "missing"
+
+    code, payload = invoke(monkeypatch, capsys, "content", "audit", str(missing), "--json")
+
+    assert code == 2
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+
+
+@pytest.mark.parametrize("surface", [("skill", "run"), ("workflow", "run")])
+def test_legacy_execution_surfaces_fail_closed(surface, monkeypatch, capsys) -> None:
+    code, payload = invoke(monkeypatch, capsys, *surface, "vault", "asset")
+
+    assert code == 1
+    assert payload["error"]["code"] == "L4-EXECUTION-012"
+    assert payload["error"]["authority"] == "omo"

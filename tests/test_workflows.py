@@ -1,6 +1,4 @@
-"""Tests for L4 Kernel Workflow Scenario Engine."""
-
-from pathlib import Path
+"""Tests for the declarative L4 workflow catalog."""
 
 from l4_kernel.workflows import (
     SCENARIOS,
@@ -37,117 +35,33 @@ class TestWorkflow:
 
 
 class TestScenarioEngine:
-    def test_execute_health_check(self, registry):
+    def test_execute_fails_closed_without_dispatch(self, registry):
         engine = ScenarioEngine(registry)
-        wf = Workflow(
-            "test_health",
-            "测试健康",
-            [
-                WorkflowStep("health_check", "健康检查"),
-            ],
-        )
-        result = engine.execute(wf)
-        assert result["status"] == "ok"
-        assert result["steps_completed"] == 1
+        workflow = Workflow("blocked", "must use OMO", [WorkflowStep("health_check", "do not run")])
 
-    def test_execute_unknown_action(self, registry):
-        engine = ScenarioEngine(registry)
-        wf = Workflow(
-            "test_unknown",
-            "测试未知",
-            [
-                WorkflowStep("nonexistent_action", "不存在"),
-            ],
-        )
-        result = engine.execute(wf)
-        assert result["status"] == "error"
-        assert result["steps_failed"] == 1
+        result = engine.execute(workflow)
 
-    def test_execute_skip_on_error(self, registry):
-        engine = ScenarioEngine(registry)
-        wf = Workflow(
-            "test_skip",
-            "测试跳过",
-            [
-                WorkflowStep("nonexistent_action", "会失败", on_error="skip"),
-                WorkflowStep("health_check", "会成功"),
-            ],
-        )
-        result = engine.execute(wf)
-        assert result["steps_completed"] == 1
+        assert result["status"] == "deprecated"
+        assert result["error"]["code"] == "L4-EXECUTION-012"
+        assert result["error"]["authority"] == "omo"
 
-    def test_execute_multiple_steps(self, registry):
-        engine = ScenarioEngine(registry)
-        wf = Workflow(
-            "test_multi",
-            "测试多步",
-            [
-                WorkflowStep("health_check", "健康"),
-                WorkflowStep("aggregate_signals", "信号"),
-                WorkflowStep("scan_cards", "CARDS"),
-            ],
-        )
-        result = engine.execute(wf)
-        assert result["status"] == "ok"
-        assert result["steps_completed"] == 3
-
-    def test_file_read_rejects_traversal(self, registry, tmp_path: Path):
-        engine = ScenarioEngine(registry)
-
-        result = engine._action_read_file(tmp_path / "domain", "../../outside.md")
-
-        assert result["ok"] is False
-        assert result["error"]["code"] == "L4-PATH-006"
-
-    def test_file_write_is_denied_by_default(self, registry, tmp_path: Path, monkeypatch):
-        monkeypatch.delenv("L4_LEGACY_DIRECT_WRITE", raising=False)
-        engine = ScenarioEngine(registry)
-
-        result = engine._action_write_file(tmp_path / "domain", "note.md", "blocked")
-
-        assert result["ok"] is False
-        assert result["error"]["code"] == "L4-MUTATION-011"
-
-    def test_execute_reports_default_denied_write_as_failure(self, registry, monkeypatch):
-        monkeypatch.delenv("L4_LEGACY_DIRECT_WRITE", raising=False)
-        engine = ScenarioEngine(registry)
-        workflow = Workflow("blocked", "blocked write", [WorkflowStep("write_file", "notes/new.md", domain="vault")])
-
-        result = engine.execute(workflow, content="blocked")
-
-        assert result["status"] == "error"
-        assert result["results"][0]["result"]["error"]["code"] == "L4-MUTATION-011"
-
-    def test_run_skill_reports_default_denied_write_as_failure(self, registry, monkeypatch):
-        monkeypatch.delenv("L4_LEGACY_DIRECT_WRITE", raising=False)
-        vault = registry.get("vault")
-        assert vault is not None
-        skills = vault.path / "_control" / "skills"
-        skills.mkdir(parents=True)
-        (skills / "blocked.yaml").write_text(
-            "skill:\n  id: test/blocked\n  steps:\n    - action: write_file\n      target: notes/new.md\n",
-            encoding="utf-8",
-        )
+    def test_run_skill_fails_closed_before_loading_asset(self, registry):
         engine = ScenarioEngine(registry)
 
         result = engine.run_skill("vault", "test/blocked", content="blocked")
 
-        assert result["status"] == "error"
-        assert result["results"][0]["result"]["error"]["code"] == "L4-MUTATION-011"
+        assert result["status"] == "deprecated"
+        assert result["error"]["code"] == "L4-EXECUTION-012"
+        assert result["skill_id"] == "test/blocked"
 
-    def test_legacy_file_write_is_contained(self, registry, tmp_path: Path, monkeypatch):
-        monkeypatch.setenv("L4_LEGACY_DIRECT_WRITE", "1")
-        root = tmp_path / "domain"
-        root.mkdir()
+    def test_run_workflow_fails_closed_before_loading_asset(self, registry):
         engine = ScenarioEngine(registry)
 
-        allowed = engine._action_write_file(root, "notes/inside.md", "allowed")
-        blocked = engine._action_write_file(root, "../../outside.md", "blocked")
+        result = engine.run_workflow("vault", "test/workflow")
 
-        assert allowed["status"] == "ok"
-        assert (root / "notes" / "inside.md").read_text(encoding="utf-8") == "allowed"
-        assert blocked["error"]["code"] == "L4-PATH-006"
-
+        assert result["status"] == "deprecated"
+        assert result["error"]["code"] == "L4-EXECUTION-012"
+        assert result["workflow_id"] == "test/workflow"
 
 class TestPredefinedScenarios:
     def test_all_scenarios_defined(self, registry):
@@ -176,8 +90,8 @@ class TestPredefinedScenarios:
 
     def test_run_scenario_health(self, registry):
         result = run_scenario("agent_session", registry=registry)
-        assert result["status"] == "ok"
-        assert result["steps_completed"] == 3
+        assert result["status"] == "deprecated"
+        assert result["error"]["code"] == "L4-EXECUTION-012"
 
     def test_run_scenario_nonexistent(self, registry):
         result = run_scenario("nonexistent")

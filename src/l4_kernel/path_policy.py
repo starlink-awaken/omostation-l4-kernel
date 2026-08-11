@@ -55,3 +55,18 @@ def mutation_denied() -> dict[str, Any]:
             "message": "direct mutation disabled; submit an EvolutionProposal through OMO",
         },
     }
+
+
+def legacy_execution_denied(surface: str) -> dict[str, Any]:
+    """Return the stable denial envelope for L4 legacy execution surfaces."""
+
+    return {
+        "ok": False,
+        "status": "deprecated",
+        "error": {
+            "code": "L4-EXECUTION-012",
+            "message": "L4 is a declarative content plane; dispatch execution through OMO",
+            "surface": surface,
+            "authority": "omo",
+        },
+    }

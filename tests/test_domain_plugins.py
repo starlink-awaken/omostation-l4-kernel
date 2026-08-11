@@ -44,7 +44,9 @@ class TestConfigDomainPlugin:
 
     def test_config_backup(self, plugin, config_path):
         result = plugin._action_config_backup(config_path)
-        assert result["backed_up"] >= 1
+        assert result["status"] == "deprecated"
+        assert result["error"]["code"] == "L4-EXECUTION-012"
+        assert not (config_path / "_archive").exists()
 
     def test_get_workflows(self, plugin):
         wf = plugin.get_workflows()
@@ -99,7 +101,9 @@ class TestEngineDomainPlugin:
             (root / "config.yaml").write_text("port: 8765\n")
             plugin = EngineDomainPlugin()
             result = plugin._action_engine_config_rotate(root)
-            assert result["status"] == "ok"
+            assert result["status"] == "deprecated"
+            assert result["error"]["code"] == "L4-EXECUTION-012"
+            assert not (root / "config.yaml.bak").exists()
 
 
 class TestStorageDomainPlugin:
@@ -158,3 +162,37 @@ class TestWorkspaceDomainPlugin:
             plugin = WorkspaceDomainPlugin()
             result = plugin._action_workspace_index(root)
             assert result["total_files"] == 1
+
+
+@pytest.mark.parametrize(
+    ("plugin_cls", "action_name"),
+    [
+        (ConfigDomainPlugin, "config_diff"),
+        (ConfigDomainPlugin, "config_backup"),
+        (ToolDomainPlugin, "tool_sync_ecos_link"),
+        (EngineDomainPlugin, "engine_restart"),
+        (EngineDomainPlugin, "engine_config_rotate"),
+        (StorageDomainPlugin, "cleanup_stale"),
+        (ModelDomainPlugin, "model_cleanup"),
+        (WorkspaceDomainPlugin, "file_search"),
+        (WorkspaceDomainPlugin, "stale_project_detect"),
+    ],
+)
+def test_legacy_functional_actions_fail_closed(plugin_cls, action_name, tmp_path):
+    (tmp_path / "config.yaml").write_text("key: value\n", encoding="utf-8")
+
+    result = plugin_cls().get_actions()[action_name](tmp_path)
+
+    assert result["action"] == action_name
+    assert result["status"] == "deprecated"
+    assert result["ok"] is False
+    assert result["error"]["code"] == "L4-EXECUTION-012"
+    assert result["error"]["authority"] == "omo"
+
+
+def test_config_auto_backup_mechanism_fails_closed(tmp_path):
+    result = ConfigDomainPlugin().get_mechanisms()["config_auto_backup"](tmp_path)
+
+    assert result["mechanism"] == "config_auto_backup"
+    assert result["status"] == "deprecated"
+    assert result["error"]["code"] == "L4-EXECUTION-012"
