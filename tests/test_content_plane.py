@@ -41,6 +41,33 @@ def test_workspace_bridge_marker_is_not_reported_as_runtime(tmp_path: Path) -> N
     assert "Workspace" in result.reason
 
 
+def test_cache_keeps_priority_over_valid_content_archive(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / "legacy"
+    cache = archive / "nested" / "state.sqlite"
+    cache.parent.mkdir(parents=True)
+    cache.write_text("cache", encoding="utf-8")
+    (archive / "CONTENT_ARCHIVE.yaml").write_text(
+        """schema: l4.content-archive/v1
+owner: personal
+reason: historical source
+source_kind: historical-source-material
+status: frozen
+execution_policy: deny
+captured_at: '2026-08-11T00:00:00+08:00'
+inventory:
+  files: 1
+  bytes: 5
+  tree_sha256: f2ab16080806c39a84ca67417f544d9b562f3a0a5e5447a071e85f2463b75a9c
+consumer_evidence:
+  scanned_at: '2026-08-11T00:00:00+08:00'
+  active_consumers: []
+""",
+        encoding="utf-8",
+    )
+
+    assert classify_artifact(tmp_path, cache).kind == "cache"
+
+
 def test_audit_is_deterministic_and_runtime_or_cache_fail_closed(tmp_path: Path) -> None:
     root = tmp_path / "domain"
     root.mkdir()

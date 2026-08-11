@@ -176,6 +176,18 @@ def test_t8_reports_projection_as_advisory(tmp_path: Path) -> None:
     assert health.issues[0].severity == "warning"
 
 
+def test_t8_rejects_invalid_content_archive(tmp_path: Path) -> None:
+    archive = tmp_path / "_runtime" / "legacy"
+    archive.mkdir(parents=True)
+    (archive / "run.py").write_text("print('old')", encoding="utf-8")
+    (archive / "CONTENT_ARCHIVE.yaml").write_text("schema: l4.content-archive/v1\n", encoding="utf-8")
+
+    health = HarnessRunner().run(make_manifest(tmp_path), ("T8",))
+
+    assert health.ok is False
+    assert {issue.code for issue in health.issues} == {"L4-CONTENT-011"}
+
+
 def test_t8_reports_missing_root_without_raising(tmp_path: Path) -> None:
     missing = tmp_path / "missing"
 

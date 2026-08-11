@@ -173,6 +173,19 @@ def test_content_audit_json_accepts_contracts_and_content(tmp_path, monkeypatch,
     assert payload["data"]["counts"] == {"content": 1, "contract": 1}
 
 
+def test_content_audit_json_reports_invalid_archive_with_stable_code(tmp_path, monkeypatch, capsys) -> None:
+    archive = tmp_path / "_runtime" / "legacy"
+    archive.mkdir(parents=True)
+    (archive / "run.py").write_text("print('old')", encoding="utf-8")
+    (archive / "CONTENT_ARCHIVE.yaml").write_text("schema: l4.content-archive/v1\n", encoding="utf-8")
+
+    code, payload = invoke(monkeypatch, capsys, "content", "audit", str(tmp_path), "--json")
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert {item["code"] for item in payload["data"]["violations"]} == {"L4-CONTENT-011"}
+
+
 def test_content_audit_rejects_missing_root(tmp_path, monkeypatch, capsys) -> None:
     missing = tmp_path / "missing"
 

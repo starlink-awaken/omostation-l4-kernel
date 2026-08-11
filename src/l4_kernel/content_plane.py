@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from l4_kernel.content_archive import ARCHIVE_ISSUE_CODE, ARCHIVE_MANIFEST_NAME, ContentArchiveResolver
+
 BRIDGE_MARKER = "l4-content-plane: workspace-bridge"
 
 _CACHE_DIRS = {
@@ -57,6 +59,7 @@ _ISSUE_CODES = {
     "runtime": "L4-CONTENT-008",
     "cache": "L4-CONTENT-009",
     "projection": "L4-CONTENT-010",
+    "invalid_archive": ARCHIVE_ISSUE_CODE,
 }
 
 
@@ -68,10 +71,11 @@ class ArtifactClassification:
     relative_path: str
     kind: str
     reason: str
+    issue_code: str | None = None
 
     @property
     def code(self) -> str | None:
-        return _ISSUE_CODES.get(self.kind)
+        return self.issue_code or _ISSUE_CODES.get(self.kind)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -92,7 +96,7 @@ class ContentPlaneReport:
 
     @property
     def violations(self) -> tuple[ArtifactClassification, ...]:
-        return tuple(item for item in self.artifacts if item.kind in {"runtime", "cache"})
+        return tuple(item for item in self.artifacts if item.kind in {"runtime", "cache", "invalid_archive"} or item.issue_code)
 
     @property
     def ok(self) -> bool:
@@ -128,7 +132,12 @@ def _auditable_file(path: Path) -> bool:
     return path.is_file()
 
 
-def classify_artifact(root: Path, path: Path) -> ArtifactClassification:
+def classify_artifact(
+    root: Path,
+    path: Path,
+    *,
+    archive_resolver: ContentArchiveResolver | None = None,
+) -> ArtifactClassification:
     """Classify one path without executing it or following symlinks."""
 
     root_absolute = root.expanduser().absolute()
@@ -137,6 +146,7 @@ def classify_artifact(root: Path, path: Path) -> ArtifactClassification:
     parts = {part.lower() for part in Path(relative).parts}
     name = path_absolute.name.lower()
     suffix = path_absolute.suffix.lower()
+    resolver = archive_resolver or ContentArchiveResolver(root_absolute)
 
     try:
         executable = bool(path_absolute.stat().st_mode & stat.S_IXUSR)
@@ -147,6 +157,22 @@ def classify_artifact(root: Path, path: Path) -> ArtifactClassification:
         kind, reason = "cache", "derived cache or mutable local store belongs in Workspace"
     elif _workspace_bridge(path_absolute):
         kind, reason = "bridge", "thin compatibility bridge to a Workspace-owned capability"
+    elif name == ARCHIVE_MANIFEST_NAME.lower():
+        archive = resolver.lookup(path_absolute)
+        if archive is not None and not archive.ok:
+            return ArtifactClassification(
+                path_absolute,
+                relative,
+                "contract",
+                f"invalid CONTENT_ARCHIVE.yaml: {archive.message}",
+                ARCHIVE_ISSUE_CODE,
+            )
+        kind, reason = "contract", "declares a frozen historical source archive"
+    elif (archive := resolver.lookup(path_absolute)) is not None:
+        if archive.ok:
+            kind, reason = "content_archive", "frozen historical source material covered by CONTENT_ARCHIVE.yaml"
+        else:
+            kind, reason = "invalid_archive", f"invalid CONTENT_ARCHIVE.yaml: {archive.message}"
     elif suffix in _RUNTIME_SUFFIXES or (executable and not suffix):
         kind, reason = "runtime", "executable implementation belongs in Workspace"
     elif name in _PROJECTION_NAMES or "_generated" in parts or "generated" in parts:
@@ -168,6 +194,11 @@ def audit_content_plane(root: Path) -> ContentPlaneReport:
     if not root_absolute.is_dir():
         raise ValueError(f"content-plane root is not a directory: {root_absolute}")
 
-    artifacts = [classify_artifact(root_absolute, path) for path in root_absolute.rglob("*") if _auditable_file(path)]
+    resolver = ContentArchiveResolver(root_absolute)
+    artifacts = [
+        classify_artifact(root_absolute, path, archive_resolver=resolver)
+        for path in root_absolute.rglob("*")
+        if _auditable_file(path)
+    ]
     artifacts.sort(key=lambda item: item.relative_path)
     return ContentPlaneReport(root_absolute, tuple(artifacts))
