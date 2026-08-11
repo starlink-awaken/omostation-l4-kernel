@@ -107,6 +107,23 @@ class TestDomainCreate:
         assert result["uncertain_paths"] == [str(root)]
         assert result["recovery"]["code"] == "L4-PUBLICATION-RECOVERY-001"
 
+    def test_create_exposes_directory_entry_durability_evidence(self, lifecycle, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        original_fsync = templates._fsync_fd
+
+        def fail_directory_fsync(fd, operation):
+            if operation == "fsync directory creation":
+                raise OSError("directory durability unknown")
+            return original_fsync(fd, operation)
+
+        monkeypatch.setattr(templates, "_fsync_fd", fail_directory_fsync)
+
+        result = lifecycle.create("publication-id", "声明式域", "document", root, owner="trusted-owner")
+
+        assert result["status"] == "error"
+        assert result["durability_uncertain_paths"] == []
+        assert result["directory_entry_durability_uncertain_paths"] == [str(root)]
+
     def test_create_dry_run(self, lifecycle):
         result = lifecycle.create("dry", "测试", "document", "/tmp/test-dry", dry_run=True)
         assert result["status"] == "dry_run"
@@ -289,6 +306,25 @@ class TestDomainMigrate:
         assert result["status"] == "error"
         assert result["changes"] == []
         assert sorted(path.name for path in root.iterdir()) == ["DOMAIN.yaml"]
+
+    def test_migrate_exposes_directory_entry_durability_evidence(self, lifecycle, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        write_domain_manifest(root, "publication-id", "trusted-owner")
+        lifecycle.registry.register(Domain("publication-id", "publication-id", "document", root, "bos://publication-id/**"))
+        original_fsync = templates._fsync_fd
+
+        def fail_directory_fsync(fd, operation):
+            if operation == "fsync directory creation":
+                raise OSError("directory durability unknown")
+            return original_fsync(fd, operation)
+
+        monkeypatch.setattr(templates, "_fsync_fd", fail_directory_fsync)
+
+        result = lifecycle.migrate("publication-id")
+
+        assert result["status"] == "error"
+        assert result["durability_uncertain_paths"] == []
+        assert result["directory_entry_durability_uncertain_paths"] == [str(root / "profiles")]
 
 
 class TestDomainHealthReport:

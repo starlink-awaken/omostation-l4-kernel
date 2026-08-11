@@ -337,6 +337,36 @@ def test_domain_init_content_contracts_reports_publication_evidence_on_method_pe
     assert (root / "DOMAIN.yaml").exists()
 
 
+def test_domain_init_content_contracts_serializes_directory_entry_durability_evidence(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+
+    def fail_publication(*_args, **_kwargs):
+        raise templates.BootstrapWriteError(
+            "directory entry durability unknown",
+            [],
+            uncertain_paths=[root],
+            directory_entry_durability_uncertain_paths=[root],
+        )
+
+    monkeypatch.setattr(cli, "init_domain_content_contracts", fail_publication)
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+        "--owner",
+        "test",
+    )
+
+    assert code == 2
+    assert payload["error"]["durability_uncertain_paths"] == []
+    assert payload["error"]["directory_entry_durability_uncertain_paths"] == [str(root)]
+
+
 def test_content_audit_json_reports_invalid_archive_with_stable_code(tmp_path, monkeypatch, capsys) -> None:
     archive = tmp_path / "_runtime" / "legacy"
     archive.mkdir(parents=True)

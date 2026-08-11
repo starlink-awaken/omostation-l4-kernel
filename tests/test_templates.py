@@ -202,7 +202,8 @@ class TestInitDomainKems:
         assert raised.value.errno == errno.ENOTSUP
         assert raised.value.residual_paths == ()
         assert raised.value.uncertain_paths == (root,)
-        assert raised.value.durability_uncertain_paths == (root,)
+        assert raised.value.durability_uncertain_paths == ()
+        assert raised.value.directory_entry_durability_uncertain_paths == (root,)
         assert root.exists()
 
     def test_no_failure_path_invokes_destructive_cleanup(self, tmp_path, monkeypatch):
@@ -496,7 +497,7 @@ class TestInitDomainKems:
         assert manifest in raised.value.uncertain_paths
         assert manifest not in raised.value.durability_uncertain_paths
 
-    def test_directory_fsync_failure_retains_directory_durability_evidence(self, tmp_path, monkeypatch):
+    def test_directory_fsync_failure_reports_directory_entry_evidence_not_generic_durability(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"
         original_fsync = templates._fsync_fd
 
@@ -511,7 +512,37 @@ class TestInitDomainKems:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
         assert raised.value.uncertain_paths == (root,)
-        assert raised.value.durability_uncertain_paths == (root,)
+        assert raised.value.durability_uncertain_paths == ()
+        assert raised.value.directory_entry_durability_uncertain_paths == (root,)
+
+    @pytest.mark.parametrize("replacement_kind", ["regular", "directory"])
+    def test_directory_replacement_never_becomes_generic_durability(self, tmp_path, monkeypatch, replacement_kind):
+        root = tmp_path / "domain"
+        root.mkdir()
+        profiles = root / "profiles"
+        original_fsync = templates._fsync_fd
+
+        def replace_directory_then_fail(fd, operation):
+            if operation == "fsync directory creation" and profiles.exists():
+                profiles.rmdir()
+                replacement = root / "caller-replacement"
+                if replacement_kind == "regular":
+                    replacement.write_text("caller replacement\n", encoding="utf-8")
+                else:
+                    replacement.mkdir()
+                replacement.replace(profiles)
+                raise OSError(errno.EIO, "directory entry durability unknown")
+            return original_fsync(fd, operation)
+
+        monkeypatch.setattr(templates, "_fsync_fd", replace_directory_then_fail)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert profiles in raised.value.uncertain_paths
+        assert profiles not in raised.value.durability_uncertain_paths
+        assert raised.value.directory_entry_durability_uncertain_paths == (profiles,)
+        assert profiles.is_dir() is (replacement_kind == "directory")
 
     def test_write_time_sentinel_after_preflight_fails_closed_with_prior_residual(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"

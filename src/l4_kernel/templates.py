@@ -385,14 +385,18 @@ class BootstrapWriteError(OSError):
         *,
         uncertain_paths: list[Path] | None = None,
         durability_uncertain_paths: list[Path] | None = None,
+        directory_entry_durability_uncertain_paths: list[Path] | None = None,
         error_number: int | None = None,
     ) -> None:
         self.residual_paths = tuple(dict.fromkeys(residual_paths))
         self.uncertain_paths = tuple(dict.fromkeys(uncertain_paths or []))
         self.durability_uncertain_paths = tuple(dict.fromkeys(durability_uncertain_paths or []))
+        self.directory_entry_durability_uncertain_paths = tuple(
+            dict.fromkeys(directory_entry_durability_uncertain_paths or [])
+        )
         self.recovery = {
             "code": "L4-PUBLICATION-RECOVERY-001",
-            "action": "inspect confirmed residual paths and uncertain incomplete targets; manually remove only files confirmed incomplete before retrying",
+            "action": "inspect confirmed residual paths and uncertain incomplete targets; inspect directory-entry durability evidence manually and never auto-delete it before retrying",
         }
         super().__init__(error_number or errno.EIO, message)
 
@@ -435,7 +439,7 @@ class _BootstrapJournal:
         self.uncertain_file_paths: list[Path] = []
         self.uncertain_directory_paths: list[Path] = []
         self.durability_uncertain_file_paths: list[Path] = []
-        self.durability_uncertain_directory_paths: list[Path] = []
+        self.directory_entry_durability_uncertain_paths: list[Path] = []
         self._uncertain_paths: list[Path] = []
         self._durability_uncertain_paths: list[Path] = []
 
@@ -468,9 +472,8 @@ class _BootstrapJournal:
         self._record(self.durability_uncertain_file_paths, path)
         self._record(self._durability_uncertain_paths, path)
 
-    def record_directory_durability_uncertain(self, path: Path) -> None:
-        self._record(self.durability_uncertain_directory_paths, path)
-        self._record(self._durability_uncertain_paths, path)
+    def record_directory_entry_durability_uncertain(self, path: Path) -> None:
+        self._record(self.directory_entry_durability_uncertain_paths, path)
 
 
 def _before_contract_publication(root: Path) -> None:
@@ -636,7 +639,7 @@ def _create_directory(journal: _BootstrapJournal, parent_fd: int, parent: Path, 
     try:
         _fsync_fd(parent_fd, "fsync directory creation")
     except OSError:
-        journal.record_directory_durability_uncertain(path)
+        journal.record_directory_entry_durability_uncertain(path)
         raise
     _after_directory_creation(path)
 
@@ -887,7 +890,6 @@ def _durability_paths(journal: _BootstrapJournal, partition: _FilePartition) -> 
                 paths.append(path)
         elif path in journal.uncertain_file_paths and _is_incomplete_sentinel(journal.root, path):
             paths.append(path)
-    paths.extend(journal.durability_uncertain_directory_paths)
     return list(dict.fromkeys(paths))
 
 
@@ -902,6 +904,7 @@ def _publication_failure(error: BaseException, journal: _BootstrapJournal) -> Bo
         list(partition.owned),
         uncertain_paths=[*journal.uncertain_paths, *partition.nonpublished],
         durability_uncertain_paths=durability_paths,
+        directory_entry_durability_uncertain_paths=journal.directory_entry_durability_uncertain_paths,
         error_number=error_number,
     )
 
@@ -982,6 +985,7 @@ def init_domain_content_contracts(
             list(partition.owned),
             uncertain_paths=[*journal.uncertain_paths, *partition.nonpublished],
             durability_uncertain_paths=durability_paths,
+            directory_entry_durability_uncertain_paths=journal.directory_entry_durability_uncertain_paths,
         )
     return journal.created_files
 

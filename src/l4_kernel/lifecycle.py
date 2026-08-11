@@ -131,6 +131,9 @@ class DomainLifecycle:
                     "residual_paths": [str(item) for item in error.residual_paths],
                     "uncertain_paths": [str(item) for item in error.uncertain_paths],
                     "durability_uncertain_paths": [str(item) for item in error.durability_uncertain_paths],
+                    "directory_entry_durability_uncertain_paths": [
+                        str(item) for item in error.directory_entry_durability_uncertain_paths
+                    ],
                     "recovery": error.recovery,
                 }
             except (ContractError, OSError, ValueError) as error:
@@ -326,6 +329,7 @@ class DomainLifecycle:
                     list(error.residual_paths),
                     list(error.uncertain_paths),
                     list(error.durability_uncertain_paths),
+                    list(error.directory_entry_durability_uncertain_paths),
                     error.recovery,
                 )
             except (ContractError, OSError, ValueError) as error:
@@ -362,6 +366,7 @@ class DomainLifecycle:
         residual_paths: list[Path] | None = None,
         uncertain_paths: list[Path] | None = None,
         durability_uncertain_paths: list[Path] | None = None,
+        directory_entry_durability_uncertain_paths: list[Path] | None = None,
         recovery: dict | None = None,
     ) -> dict:
         changes = [f"publication residual: {path}" for path in residual_paths or []]
@@ -372,6 +377,9 @@ class DomainLifecycle:
             "residual_paths": [str(path) for path in residual_paths or []],
             "uncertain_paths": [str(path) for path in uncertain_paths or []],
             "durability_uncertain_paths": [str(path) for path in durability_uncertain_paths or []],
+            "directory_entry_durability_uncertain_paths": [
+                str(path) for path in directory_entry_durability_uncertain_paths or []
+            ],
             "recovery": recovery,
             "deprecation": {
                 "code": "L4-DEPRECATION-001",
