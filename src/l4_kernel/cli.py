@@ -425,7 +425,7 @@ def cmd_domain_init_content_contracts(args: list[str]) -> int:
             )
             return 2
         value = args[index + 1]
-        if not value.strip():
+        if value.startswith("--") or not value.strip():
             _json_envelope(
                 error={"code": "L4-CONFIG-002", "message": f"{option} must be provided once and be non-empty", "path": str(root)}
             )
@@ -467,7 +467,10 @@ def cmd_domain_init_content_contracts(args: list[str]) -> int:
     except (OSError, ValueError) as error:
         _json_envelope(error={"code": "L4-CONFIG-002", "message": str(error), "path": str(root)})
         return 2
-    _json_envelope(data={"created_files": [str(path) for path in created], "manifest": asdict(manifest), "audit": audit.to_dict()})
+    _json_data(
+        {"created_files": [str(path) for path in created], "manifest": asdict(manifest), "audit": audit.to_dict()},
+        ok=audit.ok,
+    )
     return 0 if audit.ok else 1
 
 

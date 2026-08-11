@@ -227,9 +227,30 @@ class TestDomainMigrate:
         result = lifecycle.migrate("ai-config", "v5")
         assert result["status"] == "error"
 
+    def test_migrate_rejects_unsupported_version_without_writing(self, lifecycle, tmp_path):
+        root = tmp_path / "unsupported-version"
+        lifecycle.registry.register(
+            Domain("unsupported-id", "Unsupported", "document", root, "bos://unsupported-id/**")
+        )
+
+        result = lifecycle.migrate("unsupported-id", "v999")
+
+        assert result["status"] == "error"
+        assert result["changes"] == []
+        assert result["deprecation"]["replacement"] == "l4-kernel domain init-content-contracts"
+        assert "unsupported" in result["message"].lower()
+        assert not root.exists()
+
     def test_migrate_all(self, lifecycle):
         results = lifecycle.migrate_all_document_domains("v5")
         assert len(results) >= 1
+
+    def test_migrate_all_rejects_unsupported_version_at_the_envelope(self, lifecycle):
+        result = lifecycle.migrate_all_document_domains("v999")
+
+        assert result["status"] == "error"
+        assert result["changes"] == []
+        assert "unsupported" in result["message"].lower()
 
     def test_migrate_uses_manifest_identity_and_authoritative_owner(self, lifecycle, tmp_path):
         root = tmp_path / "path-basename-must-not-win"

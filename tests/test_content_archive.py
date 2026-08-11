@@ -5,6 +5,8 @@ from __future__ import annotations
 import errno
 import hashlib
 import os
+import socket
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -22,7 +24,7 @@ def _inventory(root: Path) -> dict[str, int | str]:
             path
             for path in root.rglob("*")
             if path != manifest
-            and (path.is_file() or (path.is_symlink() and (not path.is_dir() or path.name == "CONTENT_ARCHIVE.yaml")))
+            and (path.is_symlink() or path.is_file())
         ),
         key=lambda path: path.relative_to(root).as_posix(),
     )
@@ -280,6 +282,180 @@ def test_broken_symlink_is_included_in_archive_inventory(tmp_path: Path) -> None
     _write_archive_manifest(archive)
 
     assert classify_artifact(tmp_path, broken).kind == "content_archive"
+
+
+def test_directory_symlink_is_inventoried_and_fails_closed_without_recursing(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    external = tmp_path / "external"
+    archive.mkdir(parents=True)
+    external.mkdir()
+    (external / "secret.py").write_text("print('outside')\n", encoding="utf-8")
+    link = archive / "external-link"
+    link.symlink_to(external, target_is_directory=True)
+    _write_archive_manifest(archive)
+
+    report = audit_content_plane(tmp_path)
+
+    by_path = {item.relative_path: item for item in report.artifacts}
+    assert report.ok is False
+    assert by_path["_archive/old-tools/external-link"].code == "L4-CONTENT-011"
+    assert "_archive/old-tools/external-link/secret.py" not in by_path
+
+
+def test_repointing_symlink_target_invalidates_archive_inventory(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    archive.mkdir(parents=True)
+    first = archive / "first.py"
+    second = archive / "other.py"
+    first.write_text("first", encoding="utf-8")
+    second.write_text("other", encoding="utf-8")
+    link = archive / "current.py"
+    link.symlink_to(first.name)
+    _write_archive_manifest(archive)
+
+    link.unlink()
+    link.symlink_to(second.name)
+
+    assert classify_artifact(tmp_path, link).code == "L4-CONTENT-011"
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation is unavailable")
+def test_fifo_in_archive_fails_closed_as_unsupported_node(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    archive.mkdir(parents=True)
+    fifo = archive / "events.pipe"
+    os.mkfifo(fifo)
+    _write_archive_manifest(archive)
+
+    report = audit_content_plane(tmp_path)
+
+    by_path = {item.relative_path: item for item in report.artifacts}
+    assert report.ok is False
+    assert by_path["_archive/old-tools/events.pipe"].code == "L4-CONTENT-011"
+
+
+@pytest.mark.skipif(not hasattr(socket, "AF_UNIX"), reason="Unix sockets are unavailable")
+def test_socket_in_archive_fails_closed_as_unsupported_node() -> None:
+    with tempfile.TemporaryDirectory(prefix="l4-archive-", dir="/tmp") as temporary_root:
+        root = Path(temporary_root)
+        archive = root / "_archive" / "old-tools"
+        archive.mkdir(parents=True)
+        socket_path = archive / "service.sock"
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+            listener.bind(str(socket_path))
+            _write_archive_manifest(archive)
+
+            report = audit_content_plane(root)
+
+    by_path = {item.relative_path: item for item in report.artifacts}
+    assert report.ok is False
+    assert by_path["_archive/old-tools/service.sock"].code == "L4-CONTENT-011"
+
+
+def test_manifest_replacement_during_inventory_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    archive.mkdir(parents=True)
+    source = archive / "run.py"
+    source.write_text("print('old')\n", encoding="utf-8")
+    manifest = _write_archive_manifest(archive)
+    replaced = False
+
+    def replace_manifest(stage: str, path: Path) -> None:
+        nonlocal replaced
+        if stage == "manifest:before-revalidate" and path == manifest and not replaced:
+            replacement = manifest.with_suffix(".replacement")
+            replacement.write_bytes(manifest.read_bytes())
+            replacement.replace(manifest)
+            replaced = True
+
+    monkeypatch.setattr(content_archive, "_stability_hook", replace_manifest, raising=False)
+
+    assert classify_artifact(tmp_path, source).code == "L4-CONTENT-011"
+
+
+def test_manifest_same_inode_mutation_during_read_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    archive.mkdir(parents=True)
+    source = archive / "run.py"
+    source.write_text("print('old')\n", encoding="utf-8")
+    manifest = _write_archive_manifest(archive)
+    mutated = False
+
+    def mutate_manifest(stage: str, path: Path) -> None:
+        nonlocal mutated
+        if stage == "read:after" and path == manifest and not mutated:
+            with manifest.open("ab") as stream:
+                stream.write(b"# drift\n")
+            mutated = True
+
+    monkeypatch.setattr(content_archive, "_stability_hook", mutate_manifest, raising=False)
+
+    assert classify_artifact(tmp_path, source).code == "L4-CONTENT-011"
+
+
+def test_inventory_same_inode_mutation_during_read_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    archive.mkdir(parents=True)
+    source = archive / "run.py"
+    source.write_text("print('old')\n", encoding="utf-8")
+    _write_archive_manifest(archive)
+    mutated = False
+
+    def mutate_source(stage: str, path: Path) -> None:
+        nonlocal mutated
+        if stage == "read:after" and path == source and not mutated:
+            with source.open("ab") as stream:
+                stream.write(b"# drift\n")
+            mutated = True
+
+    monkeypatch.setattr(content_archive, "_stability_hook", mutate_source, raising=False)
+
+    assert classify_artifact(tmp_path, source).code == "L4-CONTENT-011"
+
+
+def test_archive_tree_enumeration_drift_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    archive.mkdir(parents=True)
+    source = archive / "run.py"
+    source.write_text("print('old')\n", encoding="utf-8")
+    _write_archive_manifest(archive)
+    drifted = False
+
+    def mutate_tree(stage: str, path: Path) -> None:
+        nonlocal drifted
+        if stage == "inventory:enumerated" and path == archive and not drifted:
+            (archive / "late.md").write_text("late", encoding="utf-8")
+            drifted = True
+
+    monkeypatch.setattr(content_archive, "_stability_hook", mutate_tree, raising=False)
+
+    assert classify_artifact(tmp_path, source).code == "L4-CONTENT-011"
+
+
+def test_external_link_target_type_drift_after_inventory_read_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    external = tmp_path / "external-node"
+    archive.mkdir(parents=True)
+    source = archive / "run.py"
+    source.write_text("print('old')\n", encoding="utf-8")
+    external.write_text("regular", encoding="utf-8")
+    (archive / "external.md").symlink_to(external)
+    _write_archive_manifest(archive)
+    drifted = False
+
+    def replace_target_after_inventory_read(stage: str, path: Path) -> None:
+        nonlocal drifted
+        if stage == "inventory:before-revalidate" and path == archive and not drifted:
+            external.unlink()
+            external.mkdir()
+            drifted = True
+
+    monkeypatch.setattr(content_archive, "_stability_hook", replace_target_after_inventory_read)
+
+    assert classify_artifact(tmp_path, source).code == "L4-CONTENT-011"
 
 
 def test_inventory_lstat_failure_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

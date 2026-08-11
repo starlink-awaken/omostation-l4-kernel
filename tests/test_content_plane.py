@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import l4_kernel.content_archive as content_archive
 from l4_kernel.content_plane import audit_content_plane, classify_artifact
 
 
@@ -109,8 +110,10 @@ def test_audit_does_not_recurse_through_directory_symlink(tmp_path: Path) -> Non
 
     report = audit_content_plane(domain)
 
-    assert report.artifacts == ()
-    assert report.ok is True
+    assert len(report.artifacts) == 1
+    assert report.artifacts[0].relative_path == "linked"
+    assert report.artifacts[0].code == "L4-CONTENT-011"
+    assert report.ok is False
 
 
 def test_audit_reports_runtime_file_symlink_without_following_directory_links(tmp_path: Path) -> None:
@@ -127,3 +130,72 @@ def test_audit_reports_runtime_file_symlink_without_following_directory_links(tm
     assert report.artifacts[0].relative_path == "runtime-link.py"
     assert report.artifacts[0].kind == "runtime"
     assert report.ok is False
+
+
+def test_content_plane_tree_drift_during_audit_fails_closed(tmp_path: Path, monkeypatch) -> None:
+    domain = tmp_path / "domain"
+    domain.mkdir()
+    _write(domain, "note.md")
+    drifted = False
+
+    def mutate_tree(stage: str, path: Path) -> None:
+        nonlocal drifted
+        if stage == "audit:enumerated" and path == domain and not drifted:
+            _write(domain, "late.py")
+            drifted = True
+
+    monkeypatch.setattr(content_archive, "_stability_hook", mutate_tree, raising=False)
+
+    report = audit_content_plane(domain)
+
+    assert report.ok is False
+    assert any(item.code == "L4-CONTENT-011" for item in report.violations)
+
+
+def test_external_symlink_target_type_drift_during_audit_fails_closed(tmp_path: Path, monkeypatch) -> None:
+    domain = tmp_path / "domain"
+    external = tmp_path / "external-node"
+    domain.mkdir()
+    external.write_text("stable file", encoding="utf-8")
+    link = domain / "external.md"
+    link.symlink_to(external)
+    drifted = False
+
+    def replace_target_with_directory(stage: str, path: Path) -> None:
+        nonlocal drifted
+        if stage == "symlink-target:sampled" and path == link and not drifted:
+            external.unlink()
+            external.mkdir()
+            drifted = True
+
+    monkeypatch.setattr(content_archive, "_stability_hook", replace_target_with_directory)
+
+    report = audit_content_plane(domain)
+
+    assert report.ok is False
+    assert [item.relative_path for item in report.artifacts] == ["external.md"]
+    assert report.artifacts[0].code == "L4-CONTENT-011"
+
+
+def test_external_symlink_target_type_drift_after_classification_fails_closed(tmp_path: Path, monkeypatch) -> None:
+    domain = tmp_path / "domain"
+    external = tmp_path / "external-node"
+    domain.mkdir()
+    external.write_text("stable file", encoding="utf-8")
+    link = domain / "external.md"
+    link.symlink_to(external)
+    drifted = False
+
+    def replace_target_before_audit_revalidation(stage: str, path: Path) -> None:
+        nonlocal drifted
+        if stage == "audit:before-revalidate" and path == domain and not drifted:
+            external.unlink()
+            external.mkdir()
+            drifted = True
+
+    monkeypatch.setattr(content_archive, "_stability_hook", replace_target_before_audit_revalidation)
+
+    report = audit_content_plane(domain)
+
+    assert report.ok is False
+    assert any(item.code == "L4-CONTENT-011" for item in report.violations)

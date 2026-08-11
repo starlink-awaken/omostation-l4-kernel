@@ -12,6 +12,7 @@ from l4_kernel.mcp_server import (
     l4_cross_search,
     l4_dashboard,
     l4_domain_info,
+    l4_domain_migrate,
     l4_domain_validate,
     l4_domains_list,
     l4_engine_logs,
@@ -60,6 +61,21 @@ class TestDomainTools:
     def test_domain_validate(self):
         result = json.loads(l4_domain_validate("vault"))
         assert "checks" in result
+
+    def test_domain_migrate_rejects_unsupported_version_with_stable_shape(self):
+        result = json.loads(l4_domain_migrate("vault", "v999"))
+
+        assert result["status"] == "error"
+        assert result["changes"] == []
+        assert result["deprecation"]["replacement"] == "l4-kernel domain init-content-contracts"
+        assert "unsupported" in result["message"].lower()
+
+    def test_bulk_domain_migrate_rejects_unsupported_version_with_stable_shape(self):
+        result = json.loads(l4_domain_migrate(to_version="v999"))
+
+        assert result["status"] == "error"
+        assert result["changes"] == []
+        assert result["deprecation"]["replacement"] == "l4-kernel domain init-content-contracts"
 
 
 class TestKemsTools:

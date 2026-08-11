@@ -1,6 +1,6 @@
-"""L4 Kernel Templates — KEMS 控制面标准模板与 Schema 校验。
+"""L4 Kernel Templates — 声明式内容契约发布与 legacy KEMS Schema 校验。
 
-基于 8 个 DocumentDomain 的实际 KEMS 文件分析结果。
+新建域仅发布内容契约；旧 KEMS 模板与校验器保留为兼容读取接口。
 """
 
 from __future__ import annotations
@@ -488,14 +488,17 @@ def _before_final_contract_verification(root: Path) -> None:
     del root
 
 
-def _validate_text(value: str, label: str) -> str:
+def _validate_text(value: str, label: str, *, canonical_domain_id: bool = True) -> str:
     if not isinstance(value, str):
         raise ValueError(f"{label} must be a string")
     normalized = value.strip()
     if not normalized or "\x00" in normalized:
         raise ValueError(f"{label} must not be empty")
-    if label == "domain id" and ("/" in normalized or "\\" in normalized or normalized in {".", ".."}):
-        raise ValueError("domain id must not contain path traversal")
+    if label == "domain id":
+        if canonical_domain_id and re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", normalized) is None:
+            raise ValueError("domain id must use lowercase alphanumeric kebab-case")
+        if not canonical_domain_id and ("/" in normalized or "\\" in normalized or normalized in {".", ".."}):
+            raise ValueError("legacy domain id must not contain path traversal")
     return normalized
 
 
@@ -917,13 +920,14 @@ def init_domain_content_contracts(
     owner: str = "未指定",
     domain_type_desc: str = "功能域",
     domain_purpose: str = "待定义",
-    ssot_scope: str = "本域 KEMS 文件",
+    ssot_scope: str = "本域声明式内容契约",
     key_files: str = _DEFAULT_KEY_FILES,
+    _allow_legacy_domain_id: bool = False,
 ) -> list[Path]:
     """Create only the declarative content contracts for one DocumentDomain."""
 
     root = _contract_root(domain_path)
-    domain_id = _validate_text(domain_id, "domain id")
+    domain_id = _validate_text(domain_id, "domain id", canonical_domain_id=not _allow_legacy_domain_id)
     domain_name = _validate_text(domain_name, "domain name")
     owner = _validate_text(owner, "owner")
     _require_secure_publication_platform()
@@ -996,7 +1000,7 @@ def init_domain_kems(
     owner: str = "未指定",
     domain_type_desc: str = "功能域",
     domain_purpose: str = "待定义",
-    ssot_scope: str = "本域 KEMS 文件",
+    ssot_scope: str = "本域声明式内容契约",
     key_files: str = _DEFAULT_KEY_FILES,
     *,
     domain_id: str | None = None,
@@ -1011,12 +1015,17 @@ def init_domain_kems(
     return DeclarativeBootstrapResult(
         init_domain_content_contracts(
             domain_path,
-            domain_id=domain_id or Path(domain_path).expanduser().resolve(strict=False).name,
+            domain_id=(
+                domain_id
+                if domain_id is not None
+                else Path(domain_path).expanduser().resolve(strict=False).name
+            ),
             domain_name=domain_name,
             owner=owner,
             domain_type_desc=domain_type_desc,
             domain_purpose=domain_purpose,
             ssot_scope=ssot_scope,
             key_files=key_files,
+            _allow_legacy_domain_id=True,
         )
     )

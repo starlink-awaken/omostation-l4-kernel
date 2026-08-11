@@ -70,7 +70,7 @@ class DomainLifecycle:
         流程:
         1. 校验域 ID 不重复
         2. 校验路径可用
-        3. 创建 KEMS 骨架 (DocumentDomain)
+        3. 发布声明式内容契约 (DocumentDomain)
         4. 注册到 DomainRegistry
         5. 注入 CLAUDE.md Schema
         6. 发射创建信号
@@ -81,7 +81,7 @@ class DomainLifecycle:
 
         path = Path(path)
         if path.exists() and domain_type == "document":
-            # 检查是否是空目录或已有 KEMS
+            # 兼容旧域：已有运行控制目录时必须走显式接管流程。
             control = path / "_control"
             if control.exists():
                 return {
@@ -112,7 +112,7 @@ class DomainLifecycle:
             capabilities=[],
         )
 
-        # DocumentDomain: 创建 KEMS 骨架
+        # DocumentDomain: 发布声明式内容契约
         created_files = []
         if domain_type == "document":
             try:
@@ -160,7 +160,7 @@ class DomainLifecycle:
     def adopt(self, domain_id: str) -> dict:
         """接管已存在的域目录。
 
-        与 create 不同: adopt 不会创建 KEMS 骨架，
+        与 create 不同: adopt 不会发布声明式内容契约，
         而是将已存在的目录注册到 DomainRegistry。
         """
         domain = self.registry.get(domain_id)
@@ -194,7 +194,7 @@ class DomainLifecycle:
 
         检查:
         1. 域路径是否存在
-        2. KEMS 面是否完整 (DocumentDomain)
+        2. 声明式内容契约是否完整 (DocumentDomain)
         3. Schema 是否合规
         4. 新鲜度是否正常
         """
@@ -299,6 +299,9 @@ class DomainLifecycle:
 
     def migrate(self, domain_id: str, to_version: str = "v5") -> dict:
         """迁移域至 declarative content contracts, preserving the legacy envelope."""
+        if to_version != "v5":
+            return self._migration_error(domain_id, f"unsupported migration target version: {to_version}; supported: v5")
+
         domain = self.registry.get(domain_id)
         if not domain or domain.domain_type != "document":
             return {"status": "error", "message": "Only DocumentDomain supports migration"}
@@ -582,8 +585,13 @@ class DomainLifecycle:
 
     # ── 批量操作 ────────────────────────────────────────────────────
 
-    def migrate_all_document_domains(self, to_version: str = "v5") -> dict[str, dict]:
+    def migrate_all_document_domains(self, to_version: str = "v5") -> dict:
         """批量迁移所有 DocumentDomain。"""
+        if to_version != "v5":
+            return self._migration_error(
+                "all-document-domains",
+                f"unsupported migration target version: {to_version}; supported: v5",
+            )
         results = {}
         for d in self.registry.list_document_domains():
             results[d.id] = self.migrate(d.id, to_version)
