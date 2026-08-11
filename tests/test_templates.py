@@ -1,5 +1,6 @@
 """Tests for L4 Kernel templates — KEMS 标准模板与 Schema 校验。"""
 
+import errno
 import json
 import stat
 import tempfile
@@ -111,6 +112,85 @@ class TestInitDomainKems:
         assert list(external.iterdir()) == []
         assert not (root / "DOMAIN.yaml").exists()
         assert not (root / "Method.md").exists()
+
+    def test_rollback_never_deletes_a_concurrently_replaced_contract(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        root.mkdir()
+        original_write = templates._write_contract
+
+        def replace_manifest_then_fail(path, content, journal):
+            if path.name == "Method.md":
+                manifest = root / "DOMAIN.yaml"
+                manifest.unlink()
+                manifest.write_text("replacement must survive\n", encoding="utf-8")
+                raise PermissionError("fail after replacement")
+            return original_write(path, content, journal)
+
+        monkeypatch.setattr(templates, "_write_contract", replace_manifest_then_fail)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert (root / "DOMAIN.yaml").read_text(encoding="utf-8") == "replacement must survive\n"
+        assert raised.value.residual_paths == (root / "DOMAIN.yaml",)
+
+    def test_directory_reopen_failure_rolls_back_its_owned_directory(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        root.mkdir()
+        original_open = templates._open_directory_at
+
+        def fail_profiles_reopen(parent_fd, name):
+            if name == "profiles":
+                raise PermissionError("cannot reopen profiles")
+            return original_open(parent_fd, name)
+
+        monkeypatch.setattr(templates, "_open_directory_at", fail_profiles_reopen, raising=False)
+
+        with pytest.raises(PermissionError):
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert list(root.iterdir()) == []
+
+    def test_unsupported_secure_publication_platform_fails_closed(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        monkeypatch.delattr(templates.os, "O_NOFOLLOW", raising=False)
+
+        with pytest.raises(OSError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert raised.value.errno == errno.ENOTSUP
+        assert not root.exists()
+
+    def test_file_fsync_failure_uses_the_same_safe_rollback(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        original_fsync = templates._fsync_fd
+
+        def fail_file_fsync(fd, operation):
+            if operation == "fsync contract file":
+                raise OSError("durability failure")
+            return original_fsync(fd, operation)
+
+        monkeypatch.setattr(templates, "_fsync_fd", fail_file_fsync)
+
+        with pytest.raises(OSError, match="durability failure"):
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert not root.exists()
+
+    def test_platform_not_implemented_error_is_reported_as_enotsup(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+
+        def unavailable_fsync(_fd):
+            raise NotImplementedError("not supported")
+
+        monkeypatch.setattr(templates.os, "fsync", unavailable_fsync)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert raised.value.errno == errno.ENOTSUP
+        assert raised.value.residual_paths == (root,)
+        assert not root.exists()
 
 
 class TestKemsValidator:

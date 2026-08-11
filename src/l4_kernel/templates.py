@@ -5,10 +5,12 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 import stat
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -370,21 +372,39 @@ _DEFAULT_KEY_FILES = "DOMAIN.yaml · Method.md · profiles/ · ontology/ · rubr
 _DIRECTORY_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
 
 
-class BootstrapWriteError(ValueError):
+class BootstrapWriteError(OSError):
     """A failed bootstrap whose rollback left auditable residual paths."""
 
-    def __init__(self, message: str, residual_paths: list[Path]) -> None:
+    def __init__(self, message: str, residual_paths: list[Path], error_number: int | None = None) -> None:
         self.residual_paths = tuple(residual_paths)
-        super().__init__(message)
+        super().__init__(error_number or errno.EIO, message)
+
+
+@dataclass(frozen=True)
+class _JournalEntry:
+    """A created path together with the inode identity owned by this invocation."""
+
+    path: Path
+    kind: str
+    st_dev: int
+    st_ino: int
 
 
 class _BootstrapJournal:
-    """Track only filesystem entries created by this bootstrap transaction."""
+    """Track only entries this bootstrap can prove it created."""
 
     def __init__(self, root: Path) -> None:
         self.root = root
-        self.created_files: list[Path] = []
-        self.created_dirs: list[Path] = []
+        self.entries: list[_JournalEntry] = []
+        self.unconfirmed_paths: list[Path] = []
+
+    @property
+    def created_files(self) -> list[Path]:
+        return [entry.path for entry in self.entries if entry.kind == "file"]
+
+    def record_unconfirmed(self, path: Path) -> None:
+        if path not in self.unconfirmed_paths:
+            self.unconfirmed_paths.append(path)
 
 
 def _before_contract_publication(root: Path) -> None:
@@ -459,10 +479,84 @@ def _verify_existing_manifest(root: Path, domain_id: str, domain_name: str, owne
         raise ValueError(f"conflicting existing DOMAIN.yaml: {manifest_path}")
 
 
+def _unsupported_platform(operation: str, cause: BaseException | None = None) -> OSError:
+    error = OSError(errno.ENOTSUP, f"secure contract publication unsupported: {operation}")
+    if cause is not None:
+        error.__cause__ = cause
+    return error
+
+
+def _secure_call(operation: str, function: Any, /, *args: Any, **kwargs: Any) -> Any:
+    """Convert platform stubs into one stable, fail-closed publication error."""
+
+    try:
+        return function(*args, **kwargs)
+    except NotImplementedError as error:
+        raise _unsupported_platform(operation, error) from error
+
+
+def _require_secure_publication_platform() -> None:
+    required_flags = ("O_NOFOLLOW", "O_DIRECTORY", "O_EXCL")
+    required_functions = ("open", "mkdir", "stat", "unlink", "rmdir", "fsync", "fstat", "fchmod", "write")
+    if any(not hasattr(os, flag) for flag in required_flags) or any(not hasattr(os, name) for name in required_functions):
+        raise _unsupported_platform("required flags or filesystem functions")
+
+    supports_dir_fd = getattr(os, "supports_dir_fd", set())
+    required_dir_fd = (os.open, os.mkdir, os.stat, os.unlink, os.rmdir)
+    if any(function not in supports_dir_fd for function in required_dir_fd):
+        raise _unsupported_platform("dir_fd filesystem operations")
+    if os.stat not in getattr(os, "supports_follow_symlinks", set()):
+        raise _unsupported_platform("nofollow lstat operation")
+
+
 def _open_directory(path: Path) -> int:
-    if not hasattr(os, "O_NOFOLLOW"):
-        raise OSError("safe no-follow directory publication is unavailable")
-    return os.open(path, _DIRECTORY_FLAGS)
+    return _secure_call("open directory", os.open, path, _DIRECTORY_FLAGS)
+
+
+def _open_directory_at(parent_fd: int, name: str) -> int:
+    return _secure_call("open directory at", os.open, name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
+
+
+def _stat_at(parent_fd: int, name: str) -> os.stat_result:
+    return _secure_call("lstat at", os.stat, name, dir_fd=parent_fd, follow_symlinks=False)
+
+
+def _fsync_fd(fd: int, operation: str) -> None:
+    _secure_call(operation, os.fsync, fd)
+
+
+def _append_entry(journal: _BootstrapJournal, path: Path, kind: str, info: os.stat_result) -> None:
+    matches_kind = stat.S_ISREG(info.st_mode) if kind == "file" else stat.S_ISDIR(info.st_mode)
+    if not matches_kind:
+        journal.record_unconfirmed(path)
+        raise OSError(errno.EIO, f"created {kind} changed before ownership could be recorded: {path}")
+    journal.entries.append(_JournalEntry(path, kind, info.st_dev, info.st_ino))
+
+
+def _record_created_directory(journal: _BootstrapJournal, parent_fd: int, path: Path) -> None:
+    try:
+        _append_entry(journal, path, "directory", _stat_at(parent_fd, path.name))
+    except OSError:
+        journal.record_unconfirmed(path)
+        raise
+
+
+def _record_created_file(journal: _BootstrapJournal, fd: int, path: Path) -> None:
+    try:
+        _append_entry(journal, path, "file", _secure_call("fstat created file", os.fstat, fd))
+    except OSError:
+        journal.record_unconfirmed(path)
+        raise
+
+
+def _create_directory(journal: _BootstrapJournal, parent_fd: int, parent: Path, name: str) -> bool:
+    """Create and journal a directory before any reopen can observe it."""
+
+    path = parent / name
+    _secure_call("mkdir at", os.mkdir, name, mode=0o755, dir_fd=parent_fd)
+    _record_created_directory(journal, parent_fd, path)
+    _fsync_fd(parent_fd, "fsync directory creation")
+    return True
 
 
 def _open_root(journal: _BootstrapJournal) -> int:
@@ -473,11 +567,10 @@ def _open_root(journal: _BootstrapJournal) -> int:
         parent_fd = _open_directory(root.parent)
         try:
             try:
-                os.mkdir(root.name, mode=0o755, dir_fd=parent_fd)
-                journal.created_dirs.append(root)
+                _create_directory(journal, parent_fd, root.parent, root.name)
             except FileExistsError:
                 pass
-            return os.open(root.name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
+            return _open_directory_at(parent_fd, root.name)
         finally:
             os.close(parent_fd)
 
@@ -491,11 +584,13 @@ def _open_parent(root_fd: int, root: Path, target: Path, journal: _BootstrapJour
     try:
         for part in relative_parts:
             try:
-                child_fd = os.open(part, _DIRECTORY_FLAGS, dir_fd=current_fd)
+                child_fd = _open_directory_at(current_fd, part)
             except FileNotFoundError:
-                os.mkdir(part, mode=0o755, dir_fd=current_fd)
-                child_fd = os.open(part, _DIRECTORY_FLAGS, dir_fd=current_fd)
-                journal.created_dirs.append(current_path / part)
+                try:
+                    _create_directory(journal, current_fd, current_path, part)
+                except FileExistsError:
+                    pass
+                child_fd = _open_directory_at(current_fd, part)
             os.close(current_fd)
             current_fd = child_fd
             current_path = current_path / part
@@ -513,31 +608,35 @@ def _write_contract(path: Path, content: str, journal: _BootstrapJournal) -> Non
     try:
         parent_fd = _open_parent(root_fd, journal.root, path, journal)
         try:
-            current = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+            current = _stat_at(parent_fd, path.name)
         except FileNotFoundError:
             current = None
         if current is not None:
             if not stat.S_ISREG(current.st_mode) or current.st_mode & 0o111:
                 raise ValueError(f"unsafe contract target: {path}")
             return
-        fd = os.open(
+        fd = _secure_call(
+            "create contract file",
+            os.open,
             path.name,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
             0o644,
             dir_fd=parent_fd,
         )
-        journal.created_files.append(path)
         try:
-            os.fchmod(fd, 0o644)
+            _record_created_file(journal, fd, path)
+            _secure_call("set contract mode", os.fchmod, fd, 0o644)
             payload = content.encode("utf-8")
             written = 0
             while written < len(payload):
-                count = os.write(fd, payload[written:])
+                count = _secure_call("write contract file", os.write, fd, payload[written:])
                 if count == 0:
                     raise OSError("short write while publishing content contract")
                 written += count
+            _fsync_fd(fd, "fsync contract file")
         finally:
             os.close(fd)
+        _fsync_fd(parent_fd, "fsync contract directory entry")
     finally:
         if parent_fd is not None:
             os.close(parent_fd)
@@ -549,7 +648,7 @@ def _open_existing_parent(root_fd: int, root: Path, target: Path) -> int:
     current_fd = root_fd
     try:
         for part in target.parent.relative_to(root).parts:
-            child_fd = os.open(part, _DIRECTORY_FLAGS, dir_fd=current_fd)
+            child_fd = _open_directory_at(current_fd, part)
             os.close(current_fd)
             current_fd = child_fd
         return current_fd
@@ -558,49 +657,57 @@ def _open_existing_parent(root_fd: int, root: Path, target: Path) -> int:
         raise
 
 
-def _remove_created_path(root: Path, path: Path, *, directory: bool) -> None:
+def _open_entry_parent(root: Path, path: Path) -> tuple[int, str]:
+    if path == root:
+        return _open_directory(root.parent), root.name
     root_fd = _open_directory(root)
+    return _open_existing_parent(root_fd, root, path), path.name
+
+
+def _entry_matches(entry: _JournalEntry, info: os.stat_result) -> bool:
+    correct_kind = stat.S_ISREG(info.st_mode) if entry.kind == "file" else stat.S_ISDIR(info.st_mode)
+    return correct_kind and info.st_dev == entry.st_dev and info.st_ino == entry.st_ino
+
+
+def _remove_owned_entry(root: Path, entry: _JournalEntry) -> str:
+    """Delete only a path which still names the exact inode we recorded."""
+
     parent_fd: int | None = None
     try:
-        relative = path.relative_to(root)
-        if relative.parts:
-            parent_fd = _open_existing_parent(root_fd, root, path)
-            if directory:
-                os.rmdir(relative.parts[-1], dir_fd=parent_fd)
-            else:
-                os.unlink(relative.parts[-1], dir_fd=parent_fd)
+        parent_fd, name = _open_entry_parent(root, entry.path)
+        try:
+            current = _stat_at(parent_fd, name)
+        except FileNotFoundError:
+            return "missing"
+        if not _entry_matches(entry, current):
+            return "residual"
+        if entry.kind == "directory":
+            _secure_call("remove created directory", os.rmdir, name, dir_fd=parent_fd)
+        else:
+            _secure_call("remove created file", os.unlink, name, dir_fd=parent_fd)
+        _fsync_fd(parent_fd, "fsync rollback directory entry")
+        return "removed"
+    except FileNotFoundError:
+        return "missing"
+    except OSError:
+        return "residual"
     finally:
         if parent_fd is not None:
             os.close(parent_fd)
-        elif path == root:
-            os.close(root_fd)
 
 
 def _rollback(journal: _BootstrapJournal) -> list[Path]:
     """Undo only this transaction's entries, reporting any protected residuals."""
 
-    residuals: list[Path] = []
-    for path in reversed(journal.created_files):
-        try:
-            _remove_created_path(journal.root, path, directory=False)
-        except FileNotFoundError:
-            pass
-        except OSError:
-            residuals.append(path)
-    for path in sorted(journal.created_dirs, key=lambda item: len(item.parts), reverse=True):
-        try:
-            if path == journal.root:
-                parent_fd = _open_directory(path.parent)
-                try:
-                    os.rmdir(path.name, dir_fd=parent_fd)
-                finally:
-                    os.close(parent_fd)
-            else:
-                _remove_created_path(journal.root, path, directory=True)
-        except FileNotFoundError:
-            pass
-        except OSError:
-            residuals.append(path)
+    residuals: list[Path] = list(journal.unconfirmed_paths)
+    files = [entry for entry in journal.entries if entry.kind == "file"]
+    directories = [entry for entry in journal.entries if entry.kind == "directory"]
+    for entry in reversed(files):
+        if _remove_owned_entry(journal.root, entry) == "residual" and entry.path not in residuals:
+            residuals.append(entry.path)
+    for entry in sorted(directories, key=lambda item: len(item.path.parts), reverse=True):
+        if _remove_owned_entry(journal.root, entry) == "residual" and entry.path not in residuals:
+            residuals.append(entry.path)
     return residuals
 
 
@@ -621,6 +728,7 @@ def init_domain_content_contracts(
     domain_id = _validate_text(domain_id, "domain id")
     domain_name = _validate_text(domain_name, "domain name")
     owner = _validate_text(owner, "owner")
+    _require_secure_publication_platform()
     targets = _preflight_contract_paths(root)
     _verify_existing_manifest(root, domain_id, domain_name, owner)
 
@@ -665,11 +773,14 @@ def init_domain_content_contracts(
             or generated.principal_ref != owner
         ):
             raise ContractError("L4-CONTRACT-001", "generated DOMAIN.yaml identity mismatch", root / "DOMAIN.yaml")
-    except (ContractError, OSError, ValueError):
+    except (ContractError, OSError, ValueError) as error:
         residuals = _rollback(journal)
         if residuals:
             rendered = ", ".join(str(path) for path in residuals)
-            raise BootstrapWriteError(f"bootstrap rollback left residual paths: {rendered}", residuals) from None
+            error_number = error.errno if isinstance(error, OSError) else None
+            raise BootstrapWriteError(
+                f"bootstrap rollback left residual paths: {rendered}", residuals, error_number
+            ) from None
         raise
     return journal.created_files
 
