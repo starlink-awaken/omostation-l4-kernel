@@ -168,10 +168,6 @@ def audit_content_plane(root: Path) -> ContentPlaneReport:
     if not root_absolute.is_dir():
         raise ValueError(f"content-plane root is not a directory: {root_absolute}")
 
-    artifacts = [
-        classify_artifact(root_absolute, path)
-        for path in root_absolute.rglob("*")
-        if _auditable_file(path)
-    ]
+    artifacts = [classify_artifact(root_absolute, path) for path in root_absolute.rglob("*") if _auditable_file(path)]
     artifacts.sort(key=lambda item: item.relative_path)
     return ContentPlaneReport(root_absolute, tuple(artifacts))

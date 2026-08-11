@@ -376,9 +376,7 @@ def cmd_content(args: list[str]) -> int:
     """Audit one Documents root as a declarative content plane."""
 
     if not args or args[0] != "audit" or len(args) < 2:
-        _json_envelope(
-            error={"code": "L4-CONFIG-002", "message": "usage: content audit ROOT --json", "path": None}
-        )
+        _json_envelope(error={"code": "L4-CONFIG-002", "message": "usage: content audit ROOT --json", "path": None})
         return 2
     root = Path(args[1]).expanduser()
     try:
