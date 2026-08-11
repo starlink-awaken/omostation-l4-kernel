@@ -3,6 +3,8 @@
 import errno
 import json
 import stat
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -116,7 +118,7 @@ class TestInitDomainKems:
         assert (root / "DOMAIN.yaml").exists()
         assert (root / "Method.md").exists()
 
-    def test_rollback_never_deletes_a_concurrently_replaced_contract(self, tmp_path, monkeypatch):
+    def test_non_destructive_failure_never_deletes_a_concurrently_replaced_contract(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"
         root.mkdir()
         original_write = templates._write_contract
@@ -171,7 +173,7 @@ class TestInitDomainKems:
         original_fsync = templates._fsync_fd
 
         def fail_file_fsync(fd, operation):
-            if operation == "fsync contract file":
+            if operation == "fsync contract file content":
                 raise OSError("durability failure")
             return original_fsync(fd, operation)
 
@@ -227,24 +229,45 @@ class TestInitDomainKems:
         root = tmp_path / "domain"
         original_write = templates.os.write
 
-        def short_write(_fd, _payload):
-            return 0
+        def short_write(fd, payload):
+            if payload.startswith(b"# Method"):
+                return 0
+            return original_write(fd, payload)
 
         monkeypatch.setattr(templates.os, "write", short_write)
         with pytest.raises(templates.BootstrapWriteError) as raised:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
-        assert raised.value.residual_paths == (root / "DOMAIN.yaml",)
-        assert raised.value.recovery["action"].startswith("inspect evidence")
+        method = root / "Method.md"
+        assert method in raised.value.residual_paths
+        assert method.stat().st_mode & 0o777 == 0
+        assert "uncertain incomplete" in raised.value.recovery["action"]
         monkeypatch.setattr(templates.os, "write", original_write)
 
-        with pytest.raises(templates.BootstrapWriteError, match="requires recovery"):
-            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+        command = [
+            sys.executable,
+            "-m",
+            "l4_kernel.cli",
+            "domain",
+            "init-content-contracts",
+            str(root),
+            "--domain-id",
+            "registry-id",
+            "--name",
+            "测试域",
+            "--owner",
+            "test",
+        ]
+        retried_process = subprocess.run(command, cwd=Path.cwd(), text=True, capture_output=True, check=False)
 
-        (root / "DOMAIN.yaml").unlink()
-        created = init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+        assert retried_process.returncode == 2
+        assert json.loads(retried_process.stdout)["error"]["uncertain_paths"] == [str(method)]
 
-        assert root / "DOMAIN.yaml" in created
+        method.unlink()
+        recovered = subprocess.run(command, cwd=Path.cwd(), text=True, capture_output=True, check=False)
+
+        assert recovered.returncode == 0
+        assert method.read_text(encoding="utf-8").startswith("# Method")
 
     def test_directory_name_replaced_after_mkdir_is_preserved_as_uncertain(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"
@@ -281,6 +304,12 @@ class TestInitDomainKems:
         assert method.read_text(encoding="utf-8") == "caller replacement\n"
         assert method not in raised.value.residual_paths
         assert method in raised.value.uncertain_paths
+        assert raised.value.residual_paths == (
+            root / "DOMAIN.yaml",
+            root / "profiles" / "Profile.md",
+            root / "ontology" / "DOMAIN_ONTOLOGY.md",
+            root / "rubrics" / "QUALITY_RUBRIC.md",
+        )
 
     def test_failed_publication_does_not_leak_file_descriptors(self, tmp_path, monkeypatch):
         fd_directory = Path("/dev/fd")
@@ -301,6 +330,93 @@ class TestInitDomainKems:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
         assert len(list(fd_directory.iterdir())) == before
+
+    def test_incomplete_sentinel_blocks_a_new_cli_process_until_manual_removal(self, tmp_path):
+        root = tmp_path / "domain"
+        root.mkdir()
+        method = root / "Method.md"
+        method.write_text("partial", encoding="utf-8")
+        method.chmod(0)
+        command = [
+            sys.executable,
+            "-m",
+            "l4_kernel.cli",
+            "domain",
+            "init-content-contracts",
+            str(root),
+            "--domain-id",
+            "registry-id",
+            "--name",
+            "测试域",
+            "--owner",
+            "test",
+        ]
+
+        failed = subprocess.run(command, cwd=Path.cwd(), text=True, capture_output=True, check=False)
+
+        assert failed.returncode == 2
+        payload = json.loads(failed.stdout)
+        assert payload["error"]["uncertain_paths"] == [str(method)]
+        assert method.stat().st_mode & 0o777 == 0
+
+        method.unlink()
+        recovered = subprocess.run(command, cwd=Path.cwd(), text=True, capture_output=True, check=False)
+
+        assert recovered.returncode == 0
+        assert (root / "Method.md").read_text(encoding="utf-8").startswith("# Method")
+
+    def test_fstat_failure_leaves_cross_process_recoverable_sentinel(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        original_fstat = templates.os.fstat
+
+        def fail_fstat(_fd):
+            raise OSError("fstat unavailable")
+
+        monkeypatch.setattr(templates.os, "fstat", fail_fstat)
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        target = root / "DOMAIN.yaml"
+        assert target in raised.value.uncertain_paths
+        assert target.stat().st_mode & 0o777 == 0
+        monkeypatch.setattr(templates.os, "fstat", original_fstat)
+
+        with pytest.raises(templates.BootstrapWriteError, match="incomplete content-contract sentinel") as retried:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert retried.value.uncertain_paths == (target,)
+        assert "uncertain incomplete" in retried.value.recovery["action"]
+
+    def test_incomplete_sentinel_is_scoped_to_its_domain(self, tmp_path):
+        failed_root = tmp_path / "failed"
+        failed_root.mkdir()
+        failed_method = failed_root / "Method.md"
+        failed_method.touch()
+        failed_method.chmod(0)
+        healthy_root = tmp_path / "healthy"
+
+        with pytest.raises(templates.BootstrapWriteError):
+            init_domain_content_contracts(failed_root, domain_id="failed", domain_name="失败域", owner="test")
+
+        created = init_domain_content_contracts(healthy_root, domain_id="healthy", domain_name="健康域", owner="test")
+
+        assert healthy_root / "DOMAIN.yaml" in created
+        assert failed_method.stat().st_mode & 0o777 == 0
+
+    def test_caller_owned_mode_zero_file_fails_closed_without_mutation(self, tmp_path):
+        root = tmp_path / "domain"
+        root.mkdir()
+        method = root / "Method.md"
+        method.write_text("caller content", encoding="utf-8")
+        method.chmod(0)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert raised.value.residual_paths == ()
+        assert raised.value.uncertain_paths == (method,)
+        method.chmod(0o644)
+        assert method.read_text(encoding="utf-8") == "caller content"
 
 
 class TestKemsValidator:

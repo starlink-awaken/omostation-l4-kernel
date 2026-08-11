@@ -370,6 +370,8 @@ _CONTRACT_FILES = (
 )
 _DEFAULT_KEY_FILES = "DOMAIN.yaml · Method.md · profiles/ · ontology/ · rubrics/"
 _DIRECTORY_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+_INCOMPLETE_MODE = 0o000
+_PUBLISHED_MODE = 0o644
 
 
 class BootstrapWriteError(OSError):
@@ -389,7 +391,7 @@ class BootstrapWriteError(OSError):
         self.durability_uncertain_paths = tuple(durability_uncertain_paths or [])
         self.recovery = {
             "code": "L4-PUBLICATION-RECOVERY-001",
-            "action": "inspect evidence; remove only confirmed residual files before retrying",
+            "action": "inspect confirmed residual paths and uncertain incomplete targets; manually remove only files confirmed incomplete before retrying",
         }
         super().__init__(error_number or errno.EIO, message)
 
@@ -487,6 +489,12 @@ def _preflight_contract_paths(root: Path) -> tuple[Path, ...]:
         mode = target.lstat().st_mode
         if target.is_symlink() or not stat.S_ISREG(mode):
             raise ValueError(f"unsafe contract target: {target}")
+        if stat.S_IMODE(mode) == _INCOMPLETE_MODE:
+            raise BootstrapWriteError(
+                "incomplete content-contract sentinel requires manual recovery before retry",
+                [],
+                uncertain_paths=[target],
+            )
         if mode & 0o111:
             raise ValueError(f"executable contract target: {target}")
     return targets
@@ -645,13 +653,12 @@ def _write_contract(path: Path, content: str, journal: _BootstrapJournal) -> Non
             os.open,
             path.name,
             os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-            0o644,
+            _INCOMPLETE_MODE,
             dir_fd=parent_fd,
         )
         try:
             _record_created_file(journal, fd, path)
             try:
-                _secure_call("set contract mode", os.fchmod, fd, 0o644)
                 payload = content.encode("utf-8")
                 written = 0
                 while written < len(payload):
@@ -659,7 +666,9 @@ def _write_contract(path: Path, content: str, journal: _BootstrapJournal) -> Non
                     if count == 0:
                         raise OSError("short write while publishing content contract")
                     written += count
-                _fsync_fd(fd, "fsync contract file")
+                _fsync_fd(fd, "fsync contract file content")
+                _secure_call("publish contract mode", os.fchmod, fd, _PUBLISHED_MODE)
+                _fsync_fd(fd, "fsync contract file metadata")
             except OSError:
                 journal.record_durability_uncertain(path)
                 raise
@@ -708,28 +717,10 @@ def _file_entry_matches(root: Path, entry: _JournalEntry) -> bool:
             os.close(parent_fd)
 
 
-_KNOWN_INCOMPLETE_FILES: dict[Path, _JournalEntry] = {}
-
-
-def _check_known_incomplete_files(root: Path) -> None:
-    """Reject a retry only while its known incomplete file still has the same token."""
-
-    for path, entry in tuple(_KNOWN_INCOMPLETE_FILES.items()):
-        if _file_entry_matches(root, entry):
-            raise BootstrapWriteError(
-                "publication failed previously; confirmed residual requires recovery before retry",
-                [path],
-            )
-        del _KNOWN_INCOMPLETE_FILES[path]
-
-
 def _publication_failure(error: BaseException, journal: _BootstrapJournal) -> BootstrapWriteError:
     """Sample evidence without mutating any path after a failed publication."""
 
     residual_paths = [entry.path for entry in journal.file_entries if _file_entry_matches(journal.root, entry)]
-    for entry in journal.file_entries:
-        if entry.path in journal.durability_uncertain_paths and entry.path in residual_paths:
-            _KNOWN_INCOMPLETE_FILES[entry.path] = entry
     durability_paths = [
         path
         for path in journal.durability_uncertain_paths
@@ -763,7 +754,6 @@ def init_domain_content_contracts(
     domain_name = _validate_text(domain_name, "domain name")
     owner = _validate_text(owner, "owner")
     _require_secure_publication_platform()
-    _check_known_incomplete_files(root)
     targets = _preflight_contract_paths(root)
     _verify_existing_manifest(root, domain_id, domain_name, owner)
 
@@ -815,11 +805,17 @@ def init_domain_content_contracts(
     _before_final_contract_verification(root)
     changed = [entry.path for entry in journal.file_entries if not _file_entry_matches(root, entry)]
     if changed:
+        residual_paths = [entry.path for entry in journal.file_entries if _file_entry_matches(root, entry)]
+        durability_paths = [
+            path
+            for path in journal.durability_uncertain_paths
+            if any(entry.path == path and _file_entry_matches(root, entry) for entry in journal.file_entries)
+        ]
         raise BootstrapWriteError(
             "content-contract publication failed final token verification; no cleanup was attempted",
-            [],
+            residual_paths,
             uncertain_paths=[*journal.uncertain_paths, *changed],
-            durability_uncertain_paths=journal.durability_uncertain_paths,
+            durability_uncertain_paths=durability_paths,
         )
     return journal.created_files
 
