@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import contextlib
+import errno
+import io
 import json
+import os
 import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
+import l4_kernel.templates as templates
 from l4_kernel import cli
+from l4_kernel.content_plane import ArtifactClassification, ContentPlaneReport
 
 
 def write_manifest(root: Path, *, domain_id: str = "sample", archetype: str = "library") -> Path:
@@ -144,6 +150,7 @@ def test_help_exposes_new_and_marks_old_surfaces_legacy(monkeypatch, capsys) -> 
     assert "registry list" in output
     assert "harness run" in output
     assert "content audit" in output
+    assert "--domain-id ID" in output
     assert "legacy" in output.lower()
 
 
@@ -171,6 +178,338 @@ def test_content_audit_json_accepts_contracts_and_content(tmp_path, monkeypatch,
     assert code == 0
     assert payload["ok"] is True
     assert payload["data"]["counts"] == {"content": 1, "contract": 1}
+
+
+def test_domain_init_content_contracts_creates_auditable_declarative_bootstrap(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+        "--name",
+        "测试域",
+        "--owner",
+        "test",
+    )
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert (root / "DOMAIN.yaml").exists()
+    assert payload["data"]["manifest"]["id"] == "registry-id"
+    assert payload["data"]["audit"]["counts"].get("runtime", 0) == 0
+    assert payload["data"]["audit"]["counts"].get("cache", 0) == 0
+
+
+def test_domain_init_content_contracts_fails_closed_for_invalid_arguments(monkeypatch, capsys) -> None:
+    code, payload = invoke(monkeypatch, capsys, "domain", "init-content-contracts", "--owner", "")
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+
+
+def test_domain_init_content_contracts_rejects_missing_option_value_before_write(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "--name",
+    )
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+    assert not root.exists()
+
+
+@pytest.mark.parametrize(
+    ("kind", "issue_code"),
+    [
+        ("runtime", "L4-CONTENT-008"),
+        ("cache", "L4-CONTENT-009"),
+        ("invalid_archive", "L4-CONTENT-011"),
+    ],
+)
+def test_domain_init_content_contracts_returns_truthful_failure_envelope_when_audit_fails(
+    tmp_path,
+    monkeypatch,
+    capsys,
+    kind,
+    issue_code,
+) -> None:
+    root = tmp_path / "domain"
+    violation = ArtifactClassification(root / "violation", "violation", kind, "forced audit failure", issue_code)
+    monkeypatch.setattr(cli, "audit_content_plane", lambda _root: ContentPlaneReport(root, (violation,)))
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+    )
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert payload["data"]["audit"]["violations"][0]["code"] == issue_code
+
+
+def test_domain_init_content_contracts_rejects_existing_malformed_manifest(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+    root.mkdir()
+    (root / "DOMAIN.yaml").write_text("kind: DomainManifest\n", encoding="utf-8")
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+        "--owner",
+        "test",
+    )
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONTRACT-001"
+    assert sorted(path.name for path in root.iterdir()) == ["DOMAIN.yaml"]
+
+
+def test_domain_init_content_contracts_preflights_symlinked_target_without_partial_write(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+    external = tmp_path / "external"
+    root.mkdir()
+    external.mkdir()
+    (root / "profiles").symlink_to(external, target_is_directory=True)
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+        "--owner",
+        "test",
+    )
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+    assert list(external.iterdir()) == []
+    assert sorted(path.name for path in root.iterdir()) == ["profiles"]
+
+
+def test_domain_init_content_contracts_rejects_executable_existing_target_without_overwrite(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+    root.mkdir()
+    method = root / "Method.md"
+    method.write_text("# existing\n", encoding="utf-8")
+    method.chmod(0o755)
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+        "--owner",
+        "test",
+    )
+
+    assert code == 2
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+    assert method.stat().st_mode & 0o111
+    assert sorted(path.name for path in root.iterdir()) == ["Method.md"]
+
+
+def test_domain_init_content_contracts_rejects_traversal_in_authoritative_domain_id(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "../outside",
+        "--owner",
+        "test",
+    )
+
+    assert code == 2
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+    assert not root.exists()
+
+
+@pytest.mark.parametrize("domain_id", ["Uppercase", "under_score", "-leading", "trailing-", "two--parts"])
+def test_domain_init_content_contracts_rejects_invalid_domain_id_syntax_before_write(
+    tmp_path,
+    monkeypatch,
+    capsys,
+    domain_id,
+) -> None:
+    root = tmp_path / "domain"
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        domain_id,
+    )
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+    assert not root.exists()
+
+
+@pytest.mark.parametrize("root_name", ["@学习进化", "2026"])
+def test_legacy_init_preserves_noncanonical_path_identity_without_fabrication(tmp_path, root_name) -> None:
+    root = tmp_path / root_name
+
+    with pytest.warns(DeprecationWarning):
+        templates.init_domain_kems(root, domain_name="兼容域", owner="test")
+
+    manifest = yaml.safe_load((root / "DOMAIN.yaml").read_text(encoding="utf-8"))
+    assert manifest["id"] == root_name
+
+
+def test_domain_init_content_contracts_reports_publication_evidence_on_method_permission_error(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+    original_write = templates._write_contract
+
+    def fail_method(path, content, created):
+        if path.name == "Method.md":
+            raise PermissionError("denied writing Method")
+        return original_write(path, content, created)
+
+    monkeypatch.setattr(templates, "_write_contract", fail_method)
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+        "--owner",
+        "test",
+    )
+
+    assert code == 2
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+    assert payload["error"]["residual_paths"] == [str(root / "DOMAIN.yaml")]
+    assert payload["error"]["uncertain_paths"] == [str(root)]
+    assert payload["error"]["recovery"]["code"] == "L4-PUBLICATION-RECOVERY-001"
+    assert (root / "DOMAIN.yaml").exists()
+
+
+def test_domain_init_content_contracts_serializes_directory_entry_durability_evidence(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+
+    def fail_publication(*_args, **_kwargs):
+        raise templates.BootstrapWriteError(
+            "directory entry durability unknown",
+            [],
+            uncertain_paths=[root],
+            directory_entry_durability_uncertain_paths=[root],
+        )
+
+    monkeypatch.setattr(cli, "init_domain_content_contracts", fail_publication)
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
+        "--owner",
+        "test",
+    )
+
+    assert code == 2
+    assert payload["error"]["durability_uncertain_paths"] == []
+    assert payload["error"]["directory_entry_durability_uncertain_paths"] == [str(root)]
+
+
+def test_content_audit_json_reports_invalid_archive_with_stable_code(tmp_path, monkeypatch, capsys) -> None:
+    archive = tmp_path / "_runtime" / "legacy"
+    archive.mkdir(parents=True)
+    (archive / "run.py").write_text("print('old')", encoding="utf-8")
+    (archive / "CONTENT_ARCHIVE.yaml").write_text("schema: l4.content-archive/v1\n", encoding="utf-8")
+
+    code, payload = invoke(monkeypatch, capsys, "content", "audit", str(tmp_path), "--json")
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert {item["code"] for item in payload["data"]["violations"]} == {"L4-CONTENT-011"}
+
+
+def test_content_audit_json_fails_closed_for_non_string_manifest_key(tmp_path, monkeypatch, capsys) -> None:
+    archive = tmp_path / "_archive" / "legacy"
+    archive.mkdir(parents=True)
+    (archive / "run.py").write_text("print('old')", encoding="utf-8")
+    (archive / "CONTENT_ARCHIVE.yaml").write_text("1: invalid\nschema: l4.content-archive/v1\n", encoding="utf-8")
+
+    try:
+        code, payload = invoke(monkeypatch, capsys, "content", "audit", str(tmp_path), "--json")
+    except (OSError, TypeError) as error:
+        pytest.fail(f"content audit must return a stable failure envelope, not raise: {error}")
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert {item["code"] for item in payload["data"]["violations"]} == {"L4-CONTENT-011"}
+
+
+@pytest.mark.skipif(os.name != "posix", reason="surrogateescaped filenames require POSIX filesystem semantics")
+def test_content_audit_json_serializes_surrogateescaped_path_as_valid_utf8(tmp_path) -> None:
+    archive = tmp_path / "_archive"
+    archive.mkdir()
+    filename = os.fsdecode(b"legacy-\xff.py")
+    source = archive / filename
+    try:
+        source.write_text("print('old')", encoding="utf-8")
+    except OSError as error:
+        unsupported = {errno.EILSEQ, errno.EINVAL, getattr(errno, "ENOTSUP", -1)}
+        if error.errno not in unsupported:
+            pytest.fail(f"unexpected error creating surrogateescaped filename: {error}")
+        pytest.skip(f"filesystem rejects surrogateescaped POSIX names: {error}")
+    (archive / "CONTENT_ARCHIVE.yaml").write_text("schema: l4.content-archive/v1\n", encoding="utf-8")
+    output = io.BytesIO()
+    stdout = io.TextIOWrapper(output, encoding="utf-8", errors="strict")
+
+    with contextlib.redirect_stdout(stdout):
+        code = cli.cmd_content(["audit", str(tmp_path), "--json"])
+    stdout.flush()
+    payload = json.loads(output.getvalue().decode("utf-8", errors="strict"))
+
+    assert code == 1
+    assert any(item["relative_path"] == f"_archive/{filename}" and item["code"] == "L4-CONTENT-011" for item in payload["data"]["violations"])
 
 
 def test_content_audit_rejects_missing_root(tmp_path, monkeypatch, capsys) -> None:

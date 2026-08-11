@@ -31,18 +31,26 @@ from l4_kernel.skill_loader import (
     find_skill,
     find_workflow,
 )
+from l4_kernel.templates import BootstrapWriteError, init_domain_content_contracts
 
 # 默认配置文件路径 (与 l4-kernel 同级目录)
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "l4_domain_paths.toml"
 
 
+def _json_text(payload: Any) -> str:
+    """Serialize JSON as strict UTF-8 while preserving normal Unicode text."""
+
+    text = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+    return text.encode("utf-8", errors="backslashreplace").decode("utf-8")
+
+
 def _json_envelope(*, data: Any = None, error: dict[str, Any] | None = None) -> None:
     payload = {"ok": error is None, "data": data} if error is None else {"ok": False, "error": error}
-    print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    print(_json_text(payload))
 
 
 def _json_data(data: Any, *, ok: bool) -> None:
-    print(json.dumps({"ok": ok, "data": data}, ensure_ascii=False, indent=2, default=str))
+    print(_json_text({"ok": ok, "data": data}))
 
 
 def _contract_error(error: ContractError) -> dict[str, Any]:
@@ -388,11 +396,97 @@ def cmd_content(args: list[str]) -> int:
     return 0 if report.ok else 1
 
 
+def cmd_domain_init_content_contracts(args: list[str]) -> int:
+    """Initialize one path with the validated declarative content contracts."""
+
+    if not args or args[0].startswith("-") or not args[0].strip():
+        _json_envelope(
+            error={
+                "code": "L4-CONFIG-002",
+                "message": "usage: domain init-content-contracts ROOT --domain-id ID [--name NAME] [--owner OWNER]",
+                "path": None,
+            }
+        )
+        return 2
+
+    root = Path(args[0]).expanduser()
+    options = {"--domain-id": None, "--name": root.name, "--owner": "未指定"}
+    seen: set[str] = set()
+    index = 1
+    while index < len(args):
+        option = args[index]
+        if option not in options or option in seen or index + 1 >= len(args):
+            _json_envelope(
+                error={
+                    "code": "L4-CONFIG-002",
+                    "message": "usage: domain init-content-contracts ROOT --domain-id ID [--name NAME] [--owner OWNER]",
+                    "path": str(root),
+                }
+            )
+            return 2
+        value = args[index + 1]
+        if value.startswith("--") or not value.strip():
+            _json_envelope(
+                error={
+                    "code": "L4-CONFIG-002",
+                    "message": f"{option} must be provided once and be non-empty",
+                    "path": str(root),
+                }
+            )
+            return 2
+        options[option] = value
+        seen.add(option)
+        index += 2
+
+    try:
+        if options["--domain-id"] is None:
+            raise ValueError("--domain-id is required")
+        created = init_domain_content_contracts(
+            root,
+            domain_id=options["--domain-id"],
+            domain_name=options["--name"],
+            owner=options["--owner"],
+        )
+        manifest = load_domain_manifest(root / "DOMAIN.yaml")
+        audit = audit_content_plane(root)
+    except ContractError as error:
+        _json_envelope(error=_contract_error(error))
+        return 1
+    except BootstrapWriteError as error:
+        _json_envelope(
+            error={
+                "code": "L4-CONFIG-002",
+                "message": str(error),
+                "path": str(root),
+                "residual_paths": [str(path) for path in error.residual_paths],
+                "uncertain_paths": [str(path) for path in error.uncertain_paths],
+                "durability_uncertain_paths": [str(path) for path in error.durability_uncertain_paths],
+                "directory_entry_durability_uncertain_paths": [
+                    str(path) for path in error.directory_entry_durability_uncertain_paths
+                ],
+                "recovery": error.recovery,
+            }
+        )
+        return 2
+    except (OSError, ValueError) as error:
+        _json_envelope(error={"code": "L4-CONFIG-002", "message": str(error), "path": str(root)})
+        return 2
+    _json_data(
+        {"created_files": [str(path) for path in created], "manifest": asdict(manifest), "audit": audit.to_dict()},
+        ok=audit.ok,
+    )
+    return 0 if audit.ok else 1
+
+
 def main() -> int:
     """l4-kernel CLI 入口。"""
     args = sys.argv[1:]
 
-    if args and args[0] in {"domain", "skill", "workflow", "consistency", "health"}:
+    if (
+        args
+        and args[0] in {"domain", "skill", "workflow", "consistency", "health"}
+        and args[1:2] != ["init-content-contracts"]
+    ):
         print("⚠️ 该 L4 legacy 命令已弃用，请迁移到 contract/registry/harness 或 cockpit", file=sys.stderr)
 
     if not args or args[0] in ("--help", "-h"):
@@ -405,6 +499,7 @@ def main() -> int:
         print("    registry list --registry PATH --json 列出显式知识域")
         print("    harness run DOMAIN_ID --gates ...   运行只读确定性门禁")
         print("    content audit ROOT --json           审计 Documents 内容面边界")
+        print("    domain init-content-contracts ROOT --domain-id ID  初始化声明式内容契约")
         print("    domain list/info ...                legacy 域视图")
         print("    skill list/show/run ...             legacy 技能入口")
         print("    workflow list/show/run ...          legacy 工作流入口")
@@ -429,6 +524,8 @@ def main() -> int:
 
     if cmd == "domain":
         sub = args[1] if len(args) > 1 else "list"
+        if sub == "init-content-contracts":
+            return cmd_domain_init_content_contracts(args[2:])
         if sub == "list":
             return cmd_list(args[2:])
         if sub == "info":

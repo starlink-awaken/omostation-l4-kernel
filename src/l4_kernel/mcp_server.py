@@ -240,7 +240,7 @@ def l4_domain_unfreeze(domain_id: str) -> str:
 
 
 def l4_domain_migrate(domain_id: str = "", to_version: str = "v5") -> str:
-    """迁移 KEMS 版本 (不指定=所有 DocumentDomain)。"""
+    """迁移至受支持的声明式内容契约版本 (不指定=所有 DocumentDomain)。"""
     if domain_id:
         result = _get_globals()["lifecycle"].migrate(domain_id, to_version)
     else:

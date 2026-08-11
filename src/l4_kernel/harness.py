@@ -329,7 +329,7 @@ class HarnessRunner:
             )
         issues: list[ValidationIssue] = []
         for artifact in audit_content_plane(manifest.root).artifacts:
-            if artifact.kind not in {"runtime", "cache", "projection"}:
+            if artifact.code is None:
                 continue
             issues.append(
                 ValidationIssue(
