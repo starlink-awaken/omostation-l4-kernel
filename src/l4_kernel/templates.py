@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import errno
+import hashlib
 import os
 import re
 import stat
@@ -403,6 +404,8 @@ class _JournalEntry:
     path: Path
     st_dev: int
     st_ino: int
+    expected_size: int
+    expected_sha256: str
 
 
 class _BootstrapJournal:
@@ -489,15 +492,19 @@ def _preflight_contract_paths(root: Path) -> tuple[Path, ...]:
         mode = target.lstat().st_mode
         if target.is_symlink() or not stat.S_ISREG(mode):
             raise ValueError(f"unsafe contract target: {target}")
-        if stat.S_IMODE(mode) == _INCOMPLETE_MODE:
-            raise BootstrapWriteError(
-                "incomplete content-contract sentinel requires manual recovery before retry",
-                [],
-                uncertain_paths=[target],
-            )
+        _reject_incomplete_target(target, mode)
         if mode & 0o111:
             raise ValueError(f"executable contract target: {target}")
     return targets
+
+
+def _reject_incomplete_target(path: Path, mode: int) -> None:
+    if stat.S_IMODE(mode) == _INCOMPLETE_MODE:
+        raise BootstrapWriteError(
+            "incomplete content-contract sentinel requires manual recovery before retry",
+            [],
+            uncertain_paths=[path],
+        )
 
 
 def _verify_existing_manifest(root: Path, domain_id: str, domain_name: str, owner: str) -> None:
@@ -532,7 +539,7 @@ def _secure_call(operation: str, function: Any, /, *args: Any, **kwargs: Any) ->
 
 def _require_secure_publication_platform() -> None:
     required_flags = ("O_NOFOLLOW", "O_DIRECTORY", "O_EXCL")
-    required_functions = ("open", "mkdir", "stat", "fsync", "fstat", "fchmod", "write")
+    required_functions = ("open", "mkdir", "stat", "fsync", "fstat", "fchmod", "read", "write")
     if any(not hasattr(os, flag) for flag in required_flags) or any(not hasattr(os, name) for name in required_functions):
         raise _unsupported_platform("required flags or filesystem functions")
 
@@ -560,16 +567,18 @@ def _fsync_fd(fd: int, operation: str) -> None:
     _secure_call(operation, os.fsync, fd)
 
 
-def _record_created_file(journal: _BootstrapJournal, fd: int, path: Path) -> None:
+def _record_created_file(journal: _BootstrapJournal, fd: int, path: Path, payload: bytes) -> None:
     try:
         info = _secure_call("fstat created file", os.fstat, fd)
     except OSError:
         journal.record_uncertain(path)
+        journal.record_durability_uncertain(path)
         raise
     if not stat.S_ISREG(info.st_mode):
         journal.record_uncertain(path)
+        journal.record_durability_uncertain(path)
         raise OSError(errno.EIO, f"created file changed before ownership could be recorded: {path}")
-    journal.file_entries.append(_JournalEntry(path, info.st_dev, info.st_ino))
+    journal.file_entries.append(_JournalEntry(path, info.st_dev, info.st_ino, len(payload), hashlib.sha256(payload).hexdigest()))
 
 
 def _after_directory_creation(path: Path) -> None:
@@ -633,7 +642,7 @@ def _open_parent(root_fd: int, root: Path, target: Path, journal: _BootstrapJour
         raise
 
 
-def _write_contract(path: Path, content: str, journal: _BootstrapJournal) -> None:
+def _write_contract(path: Path, payload: bytes, journal: _BootstrapJournal) -> None:
     """Publish one preflighted file with O_EXCL and O_NOFOLLOW protection."""
 
     root_fd = _open_root(journal)
@@ -647,6 +656,11 @@ def _write_contract(path: Path, content: str, journal: _BootstrapJournal) -> Non
         if current is not None:
             if not stat.S_ISREG(current.st_mode) or current.st_mode & 0o111:
                 raise ValueError(f"unsafe contract target: {path}")
+            try:
+                _reject_incomplete_target(path, current.st_mode)
+            except BootstrapWriteError:
+                journal.record_uncertain(path)
+                raise
             return
         fd = _secure_call(
             "create contract file",
@@ -657,9 +671,8 @@ def _write_contract(path: Path, content: str, journal: _BootstrapJournal) -> Non
             dir_fd=parent_fd,
         )
         try:
-            _record_created_file(journal, fd, path)
+            _record_created_file(journal, fd, path, payload)
             try:
-                payload = content.encode("utf-8")
                 written = 0
                 while written < len(payload):
                     count = _secure_call("write contract file", os.write, fd, payload[written:])
@@ -670,6 +683,7 @@ def _write_contract(path: Path, content: str, journal: _BootstrapJournal) -> Non
                 _secure_call("publish contract mode", os.fchmod, fd, _PUBLISHED_MODE)
                 _fsync_fd(fd, "fsync contract file metadata")
             except OSError:
+                journal.record_uncertain(path)
                 journal.record_durability_uncertain(path)
                 raise
         finally:
@@ -704,23 +718,59 @@ def _open_file_parent(root: Path, path: Path) -> int:
     return _open_existing_parent(root_fd, root, path)
 
 
-def _file_entry_matches(root: Path, entry: _JournalEntry) -> bool:
+def _sample_file_entry(root: Path, entry: _JournalEntry) -> bool:
+    """Read one no-follow file descriptor and verify its published identity exactly once."""
+
     parent_fd: int | None = None
+    file_fd: int | None = None
     try:
         parent_fd = _open_file_parent(root, entry.path)
-        info = _stat_at(parent_fd, entry.path.name)
-        return stat.S_ISREG(info.st_mode) and info.st_dev == entry.st_dev and info.st_ino == entry.st_ino
+        file_fd = _secure_call(
+            "open published contract for verification",
+            os.open,
+            entry.path.name,
+            os.O_RDONLY | os.O_NOFOLLOW,
+            dir_fd=parent_fd,
+        )
+        info = _secure_call("fstat published contract", os.fstat, file_fd)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_dev != entry.st_dev
+            or info.st_ino != entry.st_ino
+            or stat.S_IMODE(info.st_mode) != _PUBLISHED_MODE
+            or info.st_size != entry.expected_size
+        ):
+            return False
+        digest = hashlib.sha256()
+        while True:
+            chunk = _secure_call("read published contract", os.read, file_fd, 65536)
+            if not chunk:
+                break
+            digest.update(chunk)
+        return digest.hexdigest() == entry.expected_sha256
     except OSError:
         return False
     finally:
+        if file_fd is not None:
+            os.close(file_fd)
         if parent_fd is not None:
             os.close(parent_fd)
+
+
+def _partition_file_entries(root: Path, entries: list[_JournalEntry]) -> tuple[list[Path], list[Path]]:
+    """Sample each entry once, returning published matches and changed/uncertain paths."""
+
+    matched: list[Path] = []
+    changed: list[Path] = []
+    for entry in entries:
+        (matched if _sample_file_entry(root, entry) else changed).append(entry.path)
+    return matched, changed
 
 
 def _publication_failure(error: BaseException, journal: _BootstrapJournal) -> BootstrapWriteError:
     """Sample evidence without mutating any path after a failed publication."""
 
-    residual_paths = [entry.path for entry in journal.file_entries if _file_entry_matches(journal.root, entry)]
+    residual_paths, _ = _partition_file_entries(journal.root, journal.file_entries)
     durability_paths = [
         path
         for path in journal.durability_uncertain_paths
@@ -783,12 +833,13 @@ def init_domain_content_contracts(
         root / "ontology" / "DOMAIN_ONTOLOGY.md": f"# Domain ontology — {domain_name}\n\n- Scope: {ssot_scope}\n- Key files: {key_files}\n",
         root / "rubrics" / "QUALITY_RUBRIC.md": f"# Quality rubric — {domain_name}\n\n- Content remains declarative and canonical.\n",
     }
+    payloads = {path: content.encode("utf-8") for path, content in files.items()}
     journal = _BootstrapJournal(root)
     try:
         _before_contract_publication(root)
-        for path, content in files.items():
-            _write_contract(path, content, journal)
-        if set(targets) != set(files):  # defensive invariant for future template edits
+        for path, payload in payloads.items():
+            _write_contract(path, payload, journal)
+        if set(targets) != set(payloads):  # defensive invariant for future template edits
             raise RuntimeError("contract preflight and output targets diverged")
         generated = load_domain_manifest(root / "DOMAIN.yaml")
         if (
@@ -803,14 +854,9 @@ def init_domain_content_contracts(
             raise _publication_failure(error, journal) from None
         raise
     _before_final_contract_verification(root)
-    changed = [entry.path for entry in journal.file_entries if not _file_entry_matches(root, entry)]
+    residual_paths, changed = _partition_file_entries(root, journal.file_entries)
     if changed:
-        residual_paths = [entry.path for entry in journal.file_entries if _file_entry_matches(root, entry)]
-        durability_paths = [
-            path
-            for path in journal.durability_uncertain_paths
-            if any(entry.path == path and _file_entry_matches(root, entry) for entry in journal.file_entries)
-        ]
+        durability_paths = [path for path in journal.durability_uncertain_paths if path in residual_paths]
         raise BootstrapWriteError(
             "content-contract publication failed final token verification; no cleanup was attempted",
             residual_paths,

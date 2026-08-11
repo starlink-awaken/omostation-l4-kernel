@@ -182,7 +182,8 @@ class TestInitDomainKems:
         with pytest.raises(templates.BootstrapWriteError) as raised:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
-        assert raised.value.residual_paths == (root / "DOMAIN.yaml",)
+        assert raised.value.residual_paths == ()
+        assert raised.value.uncertain_paths == (root, root / "DOMAIN.yaml")
         assert raised.value.durability_uncertain_paths == (root / "DOMAIN.yaml",)
         assert raised.value.recovery["code"] == "L4-PUBLICATION-RECOVERY-001"
         assert (root / "DOMAIN.yaml").exists()
@@ -239,7 +240,8 @@ class TestInitDomainKems:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
         method = root / "Method.md"
-        assert method in raised.value.residual_paths
+        assert raised.value.residual_paths == (root / "DOMAIN.yaml",)
+        assert method in raised.value.uncertain_paths
         assert method.stat().st_mode & 0o777 == 0
         assert "uncertain incomplete" in raised.value.recovery["action"]
         monkeypatch.setattr(templates.os, "write", original_write)
@@ -311,6 +313,86 @@ class TestInitDomainKems:
             root / "rubrics" / "QUALITY_RUBRIC.md",
         )
 
+    @pytest.mark.parametrize("mutation", ["same_size_content", "truncate", "mode_zero", "mode_executable"])
+    def test_final_verification_rejects_same_inode_content_and_mode_changes(self, tmp_path, monkeypatch, mutation):
+        root = tmp_path / "domain"
+        method = root / "Method.md"
+
+        def mutate_method(_root):
+            if mutation == "same_size_content":
+                method.write_bytes(b"x" * method.stat().st_size)
+            elif mutation == "truncate":
+                method.write_bytes(b"")
+            elif mutation == "mode_zero":
+                method.chmod(0)
+            else:
+                method.chmod(0o755)
+
+        monkeypatch.setattr(templates, "_before_final_contract_verification", mutate_method)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert method in raised.value.uncertain_paths
+        assert raised.value.residual_paths == (
+            root / "DOMAIN.yaml",
+            root / "profiles" / "Profile.md",
+            root / "ontology" / "DOMAIN_ONTOLOGY.md",
+            root / "rubrics" / "QUALITY_RUBRIC.md",
+        )
+
+    def test_write_time_sentinel_after_preflight_fails_closed_with_prior_residual(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        method = root / "Method.md"
+
+        def create_late_sentinel(_root):
+            root.mkdir()
+            method.touch()
+            method.chmod(0)
+
+        monkeypatch.setattr(templates, "_before_contract_publication", create_late_sentinel)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert method.stat().st_mode & 0o777 == 0
+        assert raised.value.residual_paths == (root / "DOMAIN.yaml",)
+        assert method in raised.value.uncertain_paths
+
+    def test_encode_failure_creates_no_artifacts(self, tmp_path):
+        root = tmp_path / "domain"
+
+        with pytest.raises(UnicodeEncodeError):
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="\ud800", owner="test")
+
+        assert not root.exists()
+
+        existing_root = tmp_path / "existing-domain"
+        existing_root.mkdir()
+        with pytest.raises(UnicodeEncodeError):
+            init_domain_content_contracts(existing_root, domain_id="existing-id", domain_name="\ud800", owner="test")
+
+        assert list(existing_root.iterdir()) == []
+
+    def test_final_snapshot_samples_each_entry_once(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        method = root / "Method.md"
+        original_sample = templates._sample_file_entry
+        samples = 0
+
+        def count_samples(sample_root, entry):
+            nonlocal samples
+            samples += 1
+            return original_sample(sample_root, entry)
+
+        monkeypatch.setattr(templates, "_sample_file_entry", count_samples)
+        monkeypatch.setattr(templates, "_before_final_contract_verification", lambda _root: method.chmod(0o755))
+
+        with pytest.raises(templates.BootstrapWriteError):
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert samples == 5
+
     def test_failed_publication_does_not_leak_file_descriptors(self, tmp_path, monkeypatch):
         fd_directory = Path("/dev/fd")
         if not fd_directory.is_dir():
@@ -378,6 +460,7 @@ class TestInitDomainKems:
 
         target = root / "DOMAIN.yaml"
         assert target in raised.value.uncertain_paths
+        assert target in raised.value.durability_uncertain_paths
         assert target.stat().st_mode & 0o777 == 0
         monkeypatch.setattr(templates.os, "fstat", original_fstat)
 
