@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import l4_kernel.templates as templates
 from l4_kernel import cli
 
 
@@ -148,6 +149,7 @@ def test_help_exposes_new_and_marks_old_surfaces_legacy(monkeypatch, capsys) -> 
     assert "registry list" in output
     assert "harness run" in output
     assert "content audit" in output
+    assert "--domain-id ID" in output
     assert "legacy" in output.lower()
 
 
@@ -295,6 +297,34 @@ def test_domain_init_content_contracts_rejects_traversal_in_authoritative_domain
         str(root),
         "--domain-id",
         "../outside",
+        "--owner",
+        "test",
+    )
+
+    assert code == 2
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+    assert not root.exists()
+
+
+def test_domain_init_content_contracts_rolls_back_on_method_permission_error(tmp_path, monkeypatch, capsys) -> None:
+    root = tmp_path / "domain"
+    original_write = templates._write_contract
+
+    def fail_method(path, content, created):
+        if path.name == "Method.md":
+            raise PermissionError("denied writing Method")
+        return original_write(path, content, created)
+
+    monkeypatch.setattr(templates, "_write_contract", fail_method)
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "init-content-contracts",
+        str(root),
+        "--domain-id",
+        "registry-id",
         "--owner",
         "test",
     )

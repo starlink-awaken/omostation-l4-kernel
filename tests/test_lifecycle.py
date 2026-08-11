@@ -6,12 +6,13 @@ from pathlib import Path
 import pytest
 import yaml
 
+import l4_kernel.templates as templates
 from l4_kernel.content_plane import audit_content_plane
 from l4_kernel.lifecycle import DomainLifecycle
 from l4_kernel.registry import Domain, DomainRegistry
 
 
-def write_domain_manifest(root: Path, domain_id: str, owner: str) -> None:
+def write_domain_manifest(root: Path, domain_id: str, owner: str, display_name: str | None = None) -> None:
     root.mkdir(parents=True, exist_ok=True)
     (root / "DOMAIN.yaml").write_text(
         yaml.safe_dump(
@@ -19,7 +20,7 @@ def write_domain_manifest(root: Path, domain_id: str, owner: str) -> None:
                 "apiVersion": "l4/v1",
                 "kind": "DomainManifest",
                 "id": domain_id,
-                "display_name": domain_id,
+                "display_name": display_name or domain_id,
                 "archetype": "library",
                 "space_ref": "personal-space",
                 "root": ".",
@@ -78,6 +79,15 @@ class TestDomainCreate:
             assert result["status"] == "error"
             assert "already exists" in result["message"]
 
+    def test_create_rejects_conflicting_existing_manifest_display_name(self, lifecycle, tmp_path):
+        root = tmp_path / "domain"
+        write_domain_manifest(root, "test-create", "trusted-owner", display_name="旧名称")
+
+        result = lifecycle.create("test-create", "新名称", "document", root, owner="trusted-owner")
+
+        assert result["status"] == "error"
+        assert sorted(path.name for path in root.iterdir()) == ["DOMAIN.yaml"]
+
     def test_create_dry_run(self, lifecycle):
         result = lifecycle.create("dry", "测试", "document", "/tmp/test-dry", dry_run=True)
         assert result["status"] == "dry_run"
@@ -106,6 +116,18 @@ class TestDomainValidate:
     def test_validate_nonexistent(self, lifecycle):
         result = lifecycle.validate("nonexistent")
         assert result["status"] == "error"
+
+    def test_validate_rejects_manifest_display_name_drift(self, lifecycle, tmp_path):
+        root = tmp_path / "domain"
+        write_domain_manifest(root, "display-id", "trusted-owner", display_name="manifest 名称")
+        lifecycle.registry.register(
+            Domain("display-id", "registry 名称", "document", root, "bos://display-id/**")
+        )
+
+        result = lifecycle.validate("display-id")
+
+        assert result["status"] == "error"
+        assert "display" in result["checks"]["domain_manifest"].lower()
 
     def test_validate_all(self, lifecycle):
         results = lifecycle.validate_all()
@@ -156,7 +178,7 @@ class TestDomainMigrate:
     def test_migrate_document(self, lifecycle):
         domain = lifecycle.registry.get("vault")
         assert domain is not None
-        write_domain_manifest(domain.path, "vault", "trusted-owner")
+        write_domain_manifest(domain.path, "vault", "trusted-owner", display_name=domain.name)
         result = lifecycle.migrate("vault", "v5")
         assert result["status"] == "ok"
         assert result["deprecation"]["replacement"] == "l4-kernel domain init-content-contracts"
@@ -175,7 +197,7 @@ class TestDomainMigrate:
 
     def test_migrate_uses_manifest_identity_and_authoritative_owner(self, lifecycle, tmp_path):
         root = tmp_path / "path-basename-must-not-win"
-        write_domain_manifest(root, "registry-id", "trusted-owner")
+        write_domain_manifest(root, "registry-id", "trusted-owner", display_name="注册表域")
         lifecycle.registry.register(
             Domain(
                 id="registry-id",
@@ -191,6 +213,16 @@ class TestDomainMigrate:
         assert result["status"] == "ok"
         assert "trusted-owner" in (root / "profiles" / "Profile.md").read_text(encoding="utf-8")
         assert "registry-id" in (root / "DOMAIN.yaml").read_text(encoding="utf-8")
+
+    def test_migrate_rejects_manifest_display_name_drift(self, lifecycle, tmp_path):
+        root = tmp_path / "domain"
+        write_domain_manifest(root, "display-id", "trusted-owner", display_name="manifest 名称")
+        lifecycle.registry.register(Domain("display-id", "registry 名称", "document", root, "bos://display-id/**"))
+
+        result = lifecycle.migrate("display-id")
+
+        assert result["status"] == "error"
+        assert result["changes"] == []
 
     def test_migrate_without_trusted_owner_fails_closed(self, lifecycle):
         result = lifecycle.migrate("vault")
@@ -219,6 +251,25 @@ class TestDomainMigrate:
         assert result["status"] == "error"
         assert result["changes"] == []
         assert list(external.iterdir()) == []
+
+    def test_migrate_write_error_reports_no_changes_when_rollback_is_clean(self, lifecycle, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        write_domain_manifest(root, "rollback-id", "trusted-owner")
+        lifecycle.registry.register(Domain("rollback-id", "rollback-id", "document", root, "bos://rollback-id/**"))
+        original_write = templates._write_contract
+
+        def fail_method(path, content, created):
+            if path.name == "Method.md":
+                raise PermissionError("denied writing Method")
+            return original_write(path, content, created)
+
+        monkeypatch.setattr(templates, "_write_contract", fail_method)
+
+        result = lifecycle.migrate("rollback-id")
+
+        assert result["status"] == "error"
+        assert result["changes"] == []
+        assert sorted(path.name for path in root.iterdir()) == ["DOMAIN.yaml"]
 
 
 class TestDomainHealthReport:

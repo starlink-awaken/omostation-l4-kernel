@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import stat
 import warnings
@@ -365,6 +366,31 @@ _CONTRACT_FILES = (
     "ontology/DOMAIN_ONTOLOGY.md",
     "rubrics/QUALITY_RUBRIC.md",
 )
+_DEFAULT_KEY_FILES = "DOMAIN.yaml · Method.md · profiles/ · ontology/ · rubrics/"
+_DIRECTORY_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+
+
+class BootstrapWriteError(ValueError):
+    """A failed bootstrap whose rollback left auditable residual paths."""
+
+    def __init__(self, message: str, residual_paths: list[Path]) -> None:
+        self.residual_paths = tuple(residual_paths)
+        super().__init__(message)
+
+
+class _BootstrapJournal:
+    """Track only filesystem entries created by this bootstrap transaction."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.created_files: list[Path] = []
+        self.created_dirs: list[Path] = []
+
+
+def _before_contract_publication(root: Path) -> None:
+    """Publication seam; each actual write still reopens paths with no-follow semantics."""
+
+    del root
 
 
 def _validate_text(value: str, label: str) -> str:
@@ -419,24 +445,163 @@ def _preflight_contract_paths(root: Path) -> tuple[Path, ...]:
     return targets
 
 
-def _verify_existing_manifest(root: Path, domain_id: str, owner: str) -> None:
+def _verify_existing_manifest(root: Path, domain_id: str, domain_name: str, owner: str) -> None:
     manifest_path = root / "DOMAIN.yaml"
     if not manifest_path.exists():
         return
     manifest = load_domain_manifest(manifest_path)
-    if manifest.root != root or manifest.id != domain_id or manifest.principal_ref != owner:
+    if (
+        manifest.root != root
+        or manifest.id != domain_id
+        or manifest.display_name != domain_name
+        or manifest.principal_ref != owner
+    ):
         raise ValueError(f"conflicting existing DOMAIN.yaml: {manifest_path}")
 
 
-def _write_contract(path: Path, content: str, created: list[Path]) -> None:
-    """Write one preflighted declarative asset once."""
+def _open_directory(path: Path) -> int:
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise OSError("safe no-follow directory publication is unavailable")
+    return os.open(path, _DIRECTORY_FLAGS)
 
-    if path.exists():
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-    path.chmod(path.stat().st_mode & ~0o111)
-    created.append(path)
+
+def _open_root(journal: _BootstrapJournal) -> int:
+    root = journal.root
+    try:
+        return _open_directory(root)
+    except FileNotFoundError:
+        parent_fd = _open_directory(root.parent)
+        try:
+            try:
+                os.mkdir(root.name, mode=0o755, dir_fd=parent_fd)
+                journal.created_dirs.append(root)
+            except FileExistsError:
+                pass
+            return os.open(root.name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
+        finally:
+            os.close(parent_fd)
+
+
+def _open_parent(root_fd: int, root: Path, target: Path, journal: _BootstrapJournal) -> int:
+    """Open/create target.parent from root_fd without following a symlink."""
+
+    relative_parts = target.parent.relative_to(root).parts
+    current_fd = root_fd
+    current_path = root
+    try:
+        for part in relative_parts:
+            try:
+                child_fd = os.open(part, _DIRECTORY_FLAGS, dir_fd=current_fd)
+            except FileNotFoundError:
+                os.mkdir(part, mode=0o755, dir_fd=current_fd)
+                child_fd = os.open(part, _DIRECTORY_FLAGS, dir_fd=current_fd)
+                journal.created_dirs.append(current_path / part)
+            os.close(current_fd)
+            current_fd = child_fd
+            current_path = current_path / part
+        return current_fd
+    except BaseException:
+        os.close(current_fd)
+        raise
+
+
+def _write_contract(path: Path, content: str, journal: _BootstrapJournal) -> None:
+    """Publish one preflighted file with O_EXCL and O_NOFOLLOW protection."""
+
+    root_fd = _open_root(journal)
+    parent_fd: int | None = None
+    try:
+        parent_fd = _open_parent(root_fd, journal.root, path, journal)
+        try:
+            current = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            current = None
+        if current is not None:
+            if not stat.S_ISREG(current.st_mode) or current.st_mode & 0o111:
+                raise ValueError(f"unsafe contract target: {path}")
+            return
+        fd = os.open(
+            path.name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o644,
+            dir_fd=parent_fd,
+        )
+        journal.created_files.append(path)
+        try:
+            os.fchmod(fd, 0o644)
+            payload = content.encode("utf-8")
+            written = 0
+            while written < len(payload):
+                count = os.write(fd, payload[written:])
+                if count == 0:
+                    raise OSError("short write while publishing content contract")
+                written += count
+        finally:
+            os.close(fd)
+    finally:
+        if parent_fd is not None:
+            os.close(parent_fd)
+
+
+def _open_existing_parent(root_fd: int, root: Path, target: Path) -> int:
+    """Open target.parent from root_fd without creating or following anything."""
+
+    current_fd = root_fd
+    try:
+        for part in target.parent.relative_to(root).parts:
+            child_fd = os.open(part, _DIRECTORY_FLAGS, dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = child_fd
+        return current_fd
+    except BaseException:
+        os.close(current_fd)
+        raise
+
+
+def _remove_created_path(root: Path, path: Path, *, directory: bool) -> None:
+    root_fd = _open_directory(root)
+    parent_fd: int | None = None
+    try:
+        relative = path.relative_to(root)
+        if relative.parts:
+            parent_fd = _open_existing_parent(root_fd, root, path)
+            if directory:
+                os.rmdir(relative.parts[-1], dir_fd=parent_fd)
+            else:
+                os.unlink(relative.parts[-1], dir_fd=parent_fd)
+    finally:
+        if parent_fd is not None:
+            os.close(parent_fd)
+        elif path == root:
+            os.close(root_fd)
+
+
+def _rollback(journal: _BootstrapJournal) -> list[Path]:
+    """Undo only this transaction's entries, reporting any protected residuals."""
+
+    residuals: list[Path] = []
+    for path in reversed(journal.created_files):
+        try:
+            _remove_created_path(journal.root, path, directory=False)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            residuals.append(path)
+    for path in sorted(journal.created_dirs, key=lambda item: len(item.parts), reverse=True):
+        try:
+            if path == journal.root:
+                parent_fd = _open_directory(path.parent)
+                try:
+                    os.rmdir(path.name, dir_fd=parent_fd)
+                finally:
+                    os.close(parent_fd)
+            else:
+                _remove_created_path(journal.root, path, directory=True)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            residuals.append(path)
+    return residuals
 
 
 def init_domain_content_contracts(
@@ -448,7 +613,7 @@ def init_domain_content_contracts(
     domain_type_desc: str = "功能域",
     domain_purpose: str = "待定义",
     ssot_scope: str = "本域 KEMS 文件",
-    key_files: str = "CARDS/ · _control/ · _knowledge/ · _storage/",
+    key_files: str = _DEFAULT_KEY_FILES,
 ) -> list[Path]:
     """Create only the declarative content contracts for one DocumentDomain."""
 
@@ -457,7 +622,7 @@ def init_domain_content_contracts(
     domain_name = _validate_text(domain_name, "domain name")
     owner = _validate_text(owner, "owner")
     targets = _preflight_contract_paths(root)
-    _verify_existing_manifest(root, domain_id, owner)
+    _verify_existing_manifest(root, domain_id, domain_name, owner)
 
     manifest: dict[str, Any] = {
         "apiVersion": "l4/v1",
@@ -485,15 +650,28 @@ def init_domain_content_contracts(
         root / "ontology" / "DOMAIN_ONTOLOGY.md": f"# Domain ontology — {domain_name}\n\n- Scope: {ssot_scope}\n- Key files: {key_files}\n",
         root / "rubrics" / "QUALITY_RUBRIC.md": f"# Quality rubric — {domain_name}\n\n- Content remains declarative and canonical.\n",
     }
-    created: list[Path] = []
-    for path, content in files.items():
-        _write_contract(path, content, created)
-    if set(targets) != set(files):  # defensive invariant for future template edits
-        raise RuntimeError("contract preflight and output targets diverged")
-    generated = load_domain_manifest(root / "DOMAIN.yaml")
-    if generated.root != root or generated.id != domain_id or generated.principal_ref != owner:
-        raise ContractError("L4-CONTRACT-001", "generated DOMAIN.yaml identity mismatch", root / "DOMAIN.yaml")
-    return created
+    journal = _BootstrapJournal(root)
+    try:
+        _before_contract_publication(root)
+        for path, content in files.items():
+            _write_contract(path, content, journal)
+        if set(targets) != set(files):  # defensive invariant for future template edits
+            raise RuntimeError("contract preflight and output targets diverged")
+        generated = load_domain_manifest(root / "DOMAIN.yaml")
+        if (
+            generated.root != root
+            or generated.id != domain_id
+            or generated.display_name != domain_name
+            or generated.principal_ref != owner
+        ):
+            raise ContractError("L4-CONTRACT-001", "generated DOMAIN.yaml identity mismatch", root / "DOMAIN.yaml")
+    except (ContractError, OSError, ValueError):
+        residuals = _rollback(journal)
+        if residuals:
+            rendered = ", ".join(str(path) for path in residuals)
+            raise BootstrapWriteError(f"bootstrap rollback left residual paths: {rendered}", residuals) from None
+        raise
+    return journal.created_files
 
 
 def init_domain_kems(
@@ -503,7 +681,7 @@ def init_domain_kems(
     domain_type_desc: str = "功能域",
     domain_purpose: str = "待定义",
     ssot_scope: str = "本域 KEMS 文件",
-    key_files: str = "CARDS/ · _control/ · _knowledge/ · _storage/",
+    key_files: str = _DEFAULT_KEY_FILES,
     *,
     domain_id: str | None = None,
 ) -> DeclarativeBootstrapResult:

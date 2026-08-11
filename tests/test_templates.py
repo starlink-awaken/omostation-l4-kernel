@@ -5,6 +5,9 @@ import stat
 import tempfile
 from pathlib import Path
 
+import pytest
+
+import l4_kernel.templates as templates
 from l4_kernel.content_plane import audit_content_plane
 from l4_kernel.contracts import load_domain_manifest
 from l4_kernel.templates import KemsValidator, init_domain_content_contracts, init_domain_kems
@@ -60,6 +63,54 @@ class TestInitDomainKems:
         init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
         assert load_domain_manifest(root / "DOMAIN.yaml").id == "registry-id"
+
+    def test_default_ontology_key_files_describe_only_declarative_artifacts(self, tmp_path):
+        root = tmp_path / "domain"
+
+        init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        ontology = (root / "ontology" / "DOMAIN_ONTOLOGY.md").read_text(encoding="utf-8")
+        assert "_control" not in ontology
+        assert "_knowledge" not in ontology
+        assert "_storage" not in ontology
+        assert "DOMAIN.yaml" in ontology
+
+    def test_write_failure_rolls_back_all_new_contract_files_and_directories(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        original_write = templates._write_contract
+
+        def fail_method(path, content, created):
+            if path.name == "Method.md":
+                raise PermissionError("denied writing Method")
+            return original_write(path, content, created)
+
+        monkeypatch.setattr(templates, "_write_contract", fail_method)
+
+        with pytest.raises(PermissionError):
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert not root.exists()
+
+    def test_publication_rechecks_parent_after_preflight_and_rolls_back(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        profiles = root / "profiles"
+        external = tmp_path / "external"
+        root.mkdir()
+        profiles.mkdir()
+        external.mkdir()
+
+        def swap_profiles_after_preflight(_root):
+            profiles.rmdir()
+            profiles.symlink_to(external, target_is_directory=True)
+
+        monkeypatch.setattr(templates, "_before_contract_publication", swap_profiles_after_preflight, raising=False)
+
+        with pytest.raises(OSError):
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert list(external.iterdir()) == []
+        assert not (root / "DOMAIN.yaml").exists()
+        assert not (root / "Method.md").exists()
 
 
 class TestKemsValidator:

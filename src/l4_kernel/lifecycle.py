@@ -17,7 +17,7 @@ from l4_kernel.content_plane import audit_content_plane
 from l4_kernel.contracts import ContractError, load_domain_manifest
 from l4_kernel.registry import Domain, DomainRegistry
 from l4_kernel.signals import SignalBus
-from l4_kernel.templates import init_domain_content_contracts
+from l4_kernel.templates import BootstrapWriteError, init_domain_content_contracts
 
 # model-driven 桥接 (可选依赖，导入失败时降级)
 try:
@@ -115,13 +115,23 @@ class DomainLifecycle:
         # DocumentDomain: 创建 KEMS 骨架
         created_files = []
         if domain_type == "document":
-            created_files = init_domain_content_contracts(
-                path,
-                domain_id=domain_id,
-                domain_name=name,
-                owner=owner,
-                domain_type_desc=description or f"{name} 域",
-            )
+            try:
+                created_files = init_domain_content_contracts(
+                    path,
+                    domain_id=domain_id,
+                    domain_name=name,
+                    owner=owner,
+                    domain_type_desc=description or f"{name} 域",
+                )
+            except BootstrapWriteError as error:
+                return {
+                    "status": "error",
+                    "message": f"Domain '{domain_id}' creation rolled back: {error}",
+                    "created_files": [],
+                    "residual_paths": [str(item) for item in error.residual_paths],
+                }
+            except (ContractError, OSError, ValueError) as error:
+                return {"status": "error", "message": f"Domain '{domain_id}' creation refused: {error}", "created_files": []}
 
         # 注册
         self.registry.register(domain)
@@ -207,6 +217,8 @@ class DomainLifecycle:
                 manifest = load_domain_manifest(manifest_path)
                 if manifest.id != domain.id or manifest.root != domain.path.resolve():
                     raise ContractError("L4-CONTRACT-001", "DOMAIN.yaml does not match registry identity", manifest_path)
+                if manifest.display_name != domain.name:
+                    raise ContractError("L4-CONTRACT-001", "DOMAIN.yaml display_name does not match registry name", manifest_path)
                 result["checks"]["domain_manifest"] = "valid"
             except ContractError as error:
                 result["status"] = "error"
@@ -295,13 +307,17 @@ class DomainLifecycle:
                 return self._migration_error(domain_id, error.message)
             if manifest.id != domain.id or manifest.root != domain.path.resolve():
                 return self._migration_error(domain_id, "DOMAIN.yaml does not match registry identity")
+            if manifest.display_name != domain.name:
+                return self._migration_error(domain_id, "DOMAIN.yaml display_name does not match registry name")
             try:
                 created_files = init_domain_content_contracts(
                     domain.path,
                     domain_id=domain.id,
-                    domain_name=domain.name,
+                    domain_name=manifest.display_name,
                     owner=manifest.principal_ref,
                 )
+            except BootstrapWriteError as error:
+                return self._migration_error(domain_id, str(error), list(error.residual_paths))
             except (ContractError, OSError, ValueError) as error:
                 return self._migration_error(domain_id, str(error))
             changes = [f"created content contract: {path.relative_to(domain.path.resolve()).as_posix()}" for path in created_files]
@@ -330,11 +346,13 @@ class DomainLifecycle:
         }
 
     @staticmethod
-    def _migration_error(domain_id: str, message: str) -> dict:
+    def _migration_error(domain_id: str, message: str, residual_paths: list[Path] | None = None) -> dict:
+        changes = [f"residual content contract: {path}" for path in residual_paths or []]
         return {
             "status": "error",
             "message": f"Domain '{domain_id}' migration refused: {message}",
-            "changes": [],
+            "changes": changes,
+            "residual_paths": [str(path) for path in residual_paths or []],
             "deprecation": {
                 "code": "L4-DEPRECATION-001",
                 "replacement": "l4-kernel domain init-content-contracts",

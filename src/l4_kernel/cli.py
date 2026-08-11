@@ -31,7 +31,7 @@ from l4_kernel.skill_loader import (
     find_skill,
     find_workflow,
 )
-from l4_kernel.templates import init_domain_content_contracts
+from l4_kernel.templates import BootstrapWriteError, init_domain_content_contracts
 
 # 默认配置文件路径 (与 l4-kernel 同级目录)
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "l4_domain_paths.toml"
@@ -448,6 +448,16 @@ def cmd_domain_init_content_contracts(args: list[str]) -> int:
     except ContractError as error:
         _json_envelope(error=_contract_error(error))
         return 1
+    except BootstrapWriteError as error:
+        _json_envelope(
+            error={
+                "code": "L4-CONFIG-002",
+                "message": str(error),
+                "path": str(root),
+                "residual_paths": [str(path) for path in error.residual_paths],
+            }
+        )
+        return 2
     except (OSError, ValueError) as error:
         _json_envelope(error={"code": "L4-CONFIG-002", "message": str(error), "path": str(root)})
         return 2
@@ -472,7 +482,7 @@ def main() -> int:
         print("    registry list --registry PATH --json 列出显式知识域")
         print("    harness run DOMAIN_ID --gates ...   运行只读确定性门禁")
         print("    content audit ROOT --json           审计 Documents 内容面边界")
-        print("    domain init-content-contracts ROOT  初始化声明式内容契约")
+        print("    domain init-content-contracts ROOT --domain-id ID  初始化声明式内容契约")
         print("    domain list/info ...                legacy 域视图")
         print("    skill list/show/run ...             legacy 技能入口")
         print("    workflow list/show/run ...          legacy 工作流入口")
