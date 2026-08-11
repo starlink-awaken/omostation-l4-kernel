@@ -182,7 +182,7 @@ class TestInitDomainKems:
         with pytest.raises(templates.BootstrapWriteError) as raised:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
-        assert raised.value.residual_paths == ()
+        assert raised.value.residual_paths == (root / "DOMAIN.yaml",)
         assert raised.value.uncertain_paths == (root, root / "DOMAIN.yaml")
         assert raised.value.durability_uncertain_paths == (root / "DOMAIN.yaml",)
         assert raised.value.recovery["code"] == "L4-PUBLICATION-RECOVERY-001"
@@ -240,7 +240,7 @@ class TestInitDomainKems:
             init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
 
         method = root / "Method.md"
-        assert raised.value.residual_paths == (root / "DOMAIN.yaml",)
+        assert raised.value.residual_paths == (root / "DOMAIN.yaml", method)
         assert method in raised.value.uncertain_paths
         assert method.stat().st_mode & 0o777 == 0
         assert "uncertain incomplete" in raised.value.recovery["action"]
@@ -336,10 +336,86 @@ class TestInitDomainKems:
         assert method in raised.value.uncertain_paths
         assert raised.value.residual_paths == (
             root / "DOMAIN.yaml",
+            root / "Method.md",
             root / "profiles" / "Profile.md",
             root / "ontology" / "DOMAIN_ONTOLOGY.md",
             root / "rubrics" / "QUALITY_RUBRIC.md",
         )
+
+    def test_read_window_rejects_same_inode_same_size_rewrite_at_eof(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        manifest = root / "DOMAIN.yaml"
+        original_read = templates.os.read
+        rewritten = False
+
+        def rewrite_at_eof(fd, size):
+            nonlocal rewritten
+            chunk = original_read(fd, size)
+            if not chunk and not rewritten:
+                rewritten = True
+                manifest.write_bytes(b"x" * manifest.stat().st_size)
+            return chunk
+
+        monkeypatch.setattr(templates.os, "read", rewrite_at_eof)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert manifest in raised.value.residual_paths
+        assert manifest in raised.value.uncertain_paths
+
+    @pytest.mark.parametrize("mutation", ["chmod", "replace"])
+    def test_read_window_rejects_mode_change_and_path_replacement(self, tmp_path, monkeypatch, mutation):
+        root = tmp_path / "domain"
+        manifest = root / "DOMAIN.yaml"
+        original_read = templates.os.read
+        mutated = False
+
+        def mutate_at_eof(fd, size):
+            nonlocal mutated
+            chunk = original_read(fd, size)
+            if not chunk and not mutated:
+                mutated = True
+                if mutation == "chmod":
+                    manifest.chmod(0o755)
+                else:
+                    replacement = root / "caller-manifest.tmp"
+                    replacement.write_text("caller replacement\n", encoding="utf-8")
+                    replacement.replace(manifest)
+            return chunk
+
+        monkeypatch.setattr(templates.os, "read", mutate_at_eof)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert manifest in raised.value.uncertain_paths
+        if mutation == "chmod":
+            assert manifest in raised.value.residual_paths
+        else:
+            assert manifest not in raised.value.residual_paths
+            assert manifest.read_text(encoding="utf-8") == "caller replacement\n"
+
+    def test_read_eio_keeps_owned_entry_as_residual_and_uncertain(self, tmp_path, monkeypatch):
+        root = tmp_path / "domain"
+        manifest = root / "DOMAIN.yaml"
+        original_read = templates.os.read
+        failed = False
+
+        def fail_first_read(fd, size):
+            nonlocal failed
+            if not failed:
+                failed = True
+                raise OSError(errno.EIO, "simulated read evidence failure")
+            return original_read(fd, size)
+
+        monkeypatch.setattr(templates.os, "read", fail_first_read)
+
+        with pytest.raises(templates.BootstrapWriteError) as raised:
+            init_domain_content_contracts(root, domain_id="registry-id", domain_name="测试域", owner="test")
+
+        assert manifest in raised.value.residual_paths
+        assert manifest in raised.value.uncertain_paths
 
     def test_write_time_sentinel_after_preflight_fails_closed_with_prior_residual(self, tmp_path, monkeypatch):
         root = tmp_path / "domain"

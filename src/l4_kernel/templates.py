@@ -387,9 +387,9 @@ class BootstrapWriteError(OSError):
         durability_uncertain_paths: list[Path] | None = None,
         error_number: int | None = None,
     ) -> None:
-        self.residual_paths = tuple(residual_paths)
-        self.uncertain_paths = tuple(uncertain_paths or [])
-        self.durability_uncertain_paths = tuple(durability_uncertain_paths or [])
+        self.residual_paths = tuple(dict.fromkeys(residual_paths))
+        self.uncertain_paths = tuple(dict.fromkeys(uncertain_paths or []))
+        self.durability_uncertain_paths = tuple(dict.fromkeys(durability_uncertain_paths or []))
         self.recovery = {
             "code": "L4-PUBLICATION-RECOVERY-001",
             "action": "inspect confirmed residual paths and uncertain incomplete targets; manually remove only files confirmed incomplete before retrying",
@@ -406,6 +406,24 @@ class _JournalEntry:
     st_ino: int
     expected_size: int
     expected_sha256: str
+
+
+@dataclass(frozen=True)
+class _FileSample:
+    """Read-window evidence for one published contract path."""
+
+    owned: bool
+    published: bool
+    inspect_error: str | None = None
+
+
+@dataclass(frozen=True)
+class _FilePartition:
+    """One-pass classification of published, owned, and non-published entries."""
+
+    published: tuple[Path, ...]
+    owned: tuple[Path, ...]
+    nonpublished: tuple[Path, ...]
 
 
 class _BootstrapJournal:
@@ -718,38 +736,74 @@ def _open_file_parent(root: Path, path: Path) -> int:
     return _open_existing_parent(root_fd, root, path)
 
 
-def _sample_file_entry(root: Path, entry: _JournalEntry) -> bool:
-    """Read one no-follow file descriptor and verify its published identity exactly once."""
+def _identity_matches(entry: _JournalEntry, info: os.stat_result | None) -> bool:
+    return bool(info and stat.S_ISREG(info.st_mode) and info.st_dev == entry.st_dev and info.st_ino == entry.st_ino)
+
+
+def _published_signature(info: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
+    return (
+        info.st_dev,
+        info.st_ino,
+        stat.S_IFMT(info.st_mode),
+        stat.S_IMODE(info.st_mode),
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+    )
+
+
+def _sample_file_entry(root: Path, entry: _JournalEntry) -> _FileSample:
+    """Close the no-follow read window before declaring a contract published."""
 
     parent_fd: int | None = None
     file_fd: int | None = None
+    path_pre: os.stat_result | None = None
+    fd_pre: os.stat_result | None = None
+    fd_post: os.stat_result | None = None
+    path_post: os.stat_result | None = None
+    digest = hashlib.sha256()
+    inspect_error: OSError | None = None
     try:
         parent_fd = _open_file_parent(root, entry.path)
-        file_fd = _secure_call(
-            "open published contract for verification",
-            os.open,
-            entry.path.name,
-            os.O_RDONLY | os.O_NOFOLLOW,
-            dir_fd=parent_fd,
+        try:
+            path_pre = _stat_at(parent_fd, entry.path.name)
+            file_fd = _secure_call(
+                "open published contract for verification",
+                os.open,
+                entry.path.name,
+                os.O_RDONLY | os.O_NOFOLLOW,
+                dir_fd=parent_fd,
+            )
+            fd_pre = _secure_call("fstat published contract before read", os.fstat, file_fd)
+            while True:
+                chunk = _secure_call("read published contract", os.read, file_fd, 65536)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        except OSError as error:
+            inspect_error = error
+        try:
+            if file_fd is not None:
+                fd_post = _secure_call("fstat published contract after read", os.fstat, file_fd)
+            path_post = _stat_at(parent_fd, entry.path.name)
+        except OSError as error:
+            inspect_error = inspect_error or error
+        owned = _identity_matches(entry, path_post)
+        infos = (path_pre, fd_pre, fd_post, path_post)
+        published = (
+            inspect_error is None
+            and all(_identity_matches(entry, info) for info in infos)
+            and all(
+                stat.S_IMODE(info.st_mode) == _PUBLISHED_MODE and info.st_size == entry.expected_size
+                for info in infos
+                if info is not None
+            )
+            and len({_published_signature(info) for info in infos if info is not None}) == 1
+            and digest.hexdigest() == entry.expected_sha256
         )
-        info = _secure_call("fstat published contract", os.fstat, file_fd)
-        if (
-            not stat.S_ISREG(info.st_mode)
-            or info.st_dev != entry.st_dev
-            or info.st_ino != entry.st_ino
-            or stat.S_IMODE(info.st_mode) != _PUBLISHED_MODE
-            or info.st_size != entry.expected_size
-        ):
-            return False
-        digest = hashlib.sha256()
-        while True:
-            chunk = _secure_call("read published contract", os.read, file_fd, 65536)
-            if not chunk:
-                break
-            digest.update(chunk)
-        return digest.hexdigest() == entry.expected_sha256
-    except OSError:
-        return False
+        return _FileSample(owned, published, str(inspect_error) if inspect_error else None)
+    except OSError as error:
+        return _FileSample(False, False, str(error))
     finally:
         if file_fd is not None:
             os.close(file_fd)
@@ -757,30 +811,37 @@ def _sample_file_entry(root: Path, entry: _JournalEntry) -> bool:
             os.close(parent_fd)
 
 
-def _partition_file_entries(root: Path, entries: list[_JournalEntry]) -> tuple[list[Path], list[Path]]:
-    """Sample each entry once, returning published matches and changed/uncertain paths."""
+def _partition_file_entries(root: Path, entries: list[_JournalEntry]) -> _FilePartition:
+    """Sample each entry once and retain evidence needed by both error envelopes."""
 
-    matched: list[Path] = []
-    changed: list[Path] = []
+    published: list[Path] = []
+    owned: list[Path] = []
+    nonpublished: list[Path] = []
     for entry in entries:
-        (matched if _sample_file_entry(root, entry) else changed).append(entry.path)
-    return matched, changed
+        sample = _sample_file_entry(root, entry)
+        if sample.owned:
+            owned.append(entry.path)
+        if sample.published:
+            published.append(entry.path)
+        else:
+            nonpublished.append(entry.path)
+    return _FilePartition(tuple(published), tuple(owned), tuple(nonpublished))
 
 
 def _publication_failure(error: BaseException, journal: _BootstrapJournal) -> BootstrapWriteError:
     """Sample evidence without mutating any path after a failed publication."""
 
-    residual_paths, _ = _partition_file_entries(journal.root, journal.file_entries)
+    partition = _partition_file_entries(journal.root, journal.file_entries)
     durability_paths = [
         path
         for path in journal.durability_uncertain_paths
-        if path in journal.uncertain_paths or path in residual_paths
+        if path in journal.uncertain_paths or path in partition.owned
     ]
     error_number = error.errno if isinstance(error, OSError) else None
     return BootstrapWriteError(
         "content-contract publication failed; no cleanup was attempted",
-        residual_paths,
-        uncertain_paths=journal.uncertain_paths,
+        list(partition.owned),
+        uncertain_paths=[*journal.uncertain_paths, *partition.nonpublished],
         durability_uncertain_paths=durability_paths,
         error_number=error_number,
     )
@@ -854,13 +915,13 @@ def init_domain_content_contracts(
             raise _publication_failure(error, journal) from None
         raise
     _before_final_contract_verification(root)
-    residual_paths, changed = _partition_file_entries(root, journal.file_entries)
-    if changed:
-        durability_paths = [path for path in journal.durability_uncertain_paths if path in residual_paths]
+    partition = _partition_file_entries(root, journal.file_entries)
+    if partition.nonpublished:
+        durability_paths = [path for path in journal.durability_uncertain_paths if path in partition.owned]
         raise BootstrapWriteError(
             "content-contract publication failed final token verification; no cleanup was attempted",
-            residual_paths,
-            uncertain_paths=[*journal.uncertain_paths, *changed],
+            list(partition.owned),
+            uncertain_paths=[*journal.uncertain_paths, *partition.nonpublished],
             durability_uncertain_paths=durability_paths,
         )
     return journal.created_files
