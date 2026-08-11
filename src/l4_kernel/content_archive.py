@@ -187,8 +187,7 @@ class ContentArchiveResolver:
 
     def __init__(self, root: Path) -> None:
         self.root = root.expanduser().absolute()
-        self._results: dict[Path, ArchiveValidation] = {}
-        self._manifests: dict[Path, Path | None] = {}
+        self._manifest_entries: dict[Path, Path | None | ArchiveValidation] = {}
 
     def lookup(self, path: Path) -> ArchiveValidation | None:
         current = path.expanduser().absolute().parent
@@ -197,41 +196,33 @@ class ContentArchiveResolver:
                 current.relative_to(self.root)
             except ValueError:
                 return None
-            if current not in self._manifests:
+            if current not in self._manifest_entries:
                 try:
-                    self._manifests[current] = next(
+                    entry: Path | None | ArchiveValidation = next(
                         (candidate for candidate in current.iterdir() if candidate.name == ARCHIVE_MANIFEST_NAME), None
                     )
                 except OSError as error:
-                    return self._invalid(
+                    entry = ArchiveValidation(
                         current,
                         current / ARCHIVE_MANIFEST_NAME,
                         f"cannot inspect CONTENT_ARCHIVE.yaml: {error}",
                     )
-            manifest = self._manifests[current]
-            if manifest is not None:
-                return self._validate(current, manifest)
+                self._manifest_entries[current] = entry
+            entry = self._manifest_entries[current]
+            if isinstance(entry, ArchiveValidation):
+                return entry
+            if entry is not None:
+                result = self._validate(current, entry)
+                self._manifest_entries[current] = result
+                return result
             if current == self.root:
                 return None
             current = current.parent
 
     def _validate(self, archive_root: Path, manifest: Path) -> ArchiveValidation:
-        cached = self._results.get(archive_root)
-        if cached is not None:
-            return cached
         try:
             _validate_mapping(self.root, archive_root, manifest)
         except ContentArchiveValidationError as error:
-            result = ArchiveValidation(archive_root, manifest, str(error))
+            return ArchiveValidation(archive_root, manifest, str(error))
         else:
-            result = ArchiveValidation(archive_root, manifest)
-        self._results[archive_root] = result
-        return result
-
-    def _invalid(self, archive_root: Path, manifest: Path, message: str) -> ArchiveValidation:
-        cached = self._results.get(archive_root)
-        if cached is not None:
-            return cached
-        result = ArchiveValidation(archive_root, manifest, message)
-        self._results[archive_root] = result
-        return result
+            return ArchiveValidation(archive_root, manifest)

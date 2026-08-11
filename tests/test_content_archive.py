@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 from datetime import datetime, timedelta, timezone
@@ -17,7 +18,12 @@ from l4_kernel.content_plane import audit_content_plane, classify_artifact
 def _inventory(root: Path) -> dict[str, int | str]:
     manifest = root / "CONTENT_ARCHIVE.yaml"
     entries = sorted(
-        (path for path in root.rglob("*") if path != manifest and (path.is_file() or (path.is_symlink() and not path.is_dir()))),
+        (
+            path
+            for path in root.rglob("*")
+            if path != manifest
+            and (path.is_file() or (path.is_symlink() and (not path.is_dir() or path.name == "CONTENT_ARCHIVE.yaml")))
+        ),
         key=lambda path: path.relative_to(root).as_posix(),
     )
     digest = hashlib.sha256()
@@ -219,6 +225,9 @@ def test_surrogateescaped_filename_hashes_without_traceback_and_detects_drift(tm
     try:
         source.write_text("print('old')\n", encoding="utf-8")
     except OSError as error:
+        unsupported = {errno.EILSEQ, errno.EINVAL, getattr(errno, "ENOTSUP", -1)}
+        if error.errno not in unsupported:
+            pytest.fail(f"unexpected error creating surrogateescaped filename: {error}")
         pytest.skip(f"filesystem rejects surrogateescaped POSIX names: {error}")
     _write_archive_manifest(archive)
 
@@ -350,3 +359,28 @@ def test_archive_root_is_validated_once_per_audit(tmp_path: Path, monkeypatch: p
 
     assert audit_content_plane(tmp_path).ok is True
     assert calls == 1
+
+
+def test_directory_probe_error_is_cached_for_all_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    archive.mkdir(parents=True)
+    (archive / "one.py").write_text("one", encoding="utf-8")
+    (archive / "two.py").write_text("two", encoding="utf-8")
+    original_iterdir = Path.iterdir
+    calls = 0
+
+    def fail_once(path: Path):
+        nonlocal calls
+        if path == archive:
+            calls += 1
+            if calls == 1:
+                raise OSError("transient directory probe failure")
+        return original_iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", fail_once)
+
+    report = audit_content_plane(tmp_path)
+
+    assert calls == 1
+    archive_items = [item for item in report.artifacts if item.path.parent == archive]
+    assert {item.code for item in archive_items} == {"L4-CONTENT-011"}

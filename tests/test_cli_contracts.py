@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
+import errno
+import io
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -200,6 +204,32 @@ def test_content_audit_json_fails_closed_for_non_string_manifest_key(tmp_path, m
     assert code == 1
     assert payload["ok"] is False
     assert {item["code"] for item in payload["data"]["violations"]} == {"L4-CONTENT-011"}
+
+
+@pytest.mark.skipif(os.name != "posix", reason="surrogateescaped filenames require POSIX filesystem semantics")
+def test_content_audit_json_serializes_surrogateescaped_path_as_valid_utf8(tmp_path) -> None:
+    archive = tmp_path / "_archive"
+    archive.mkdir()
+    filename = os.fsdecode(b"legacy-\xff.py")
+    source = archive / filename
+    try:
+        source.write_text("print('old')", encoding="utf-8")
+    except OSError as error:
+        unsupported = {errno.EILSEQ, errno.EINVAL, getattr(errno, "ENOTSUP", -1)}
+        if error.errno not in unsupported:
+            pytest.fail(f"unexpected error creating surrogateescaped filename: {error}")
+        pytest.skip(f"filesystem rejects surrogateescaped POSIX names: {error}")
+    (archive / "CONTENT_ARCHIVE.yaml").write_text("schema: l4.content-archive/v1\n", encoding="utf-8")
+    output = io.BytesIO()
+    stdout = io.TextIOWrapper(output, encoding="utf-8", errors="strict")
+
+    with contextlib.redirect_stdout(stdout):
+        code = cli.cmd_content(["audit", str(tmp_path), "--json"])
+    stdout.flush()
+    payload = json.loads(output.getvalue().decode("utf-8", errors="strict"))
+
+    assert code == 1
+    assert any(item["relative_path"] == f"_archive/{filename}" and item["code"] == "L4-CONTENT-011" for item in payload["data"]["violations"])
 
 
 def test_content_audit_rejects_missing_root(tmp_path, monkeypatch, capsys) -> None:

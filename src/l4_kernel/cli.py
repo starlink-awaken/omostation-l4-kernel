@@ -36,13 +36,20 @@ from l4_kernel.skill_loader import (
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "l4_domain_paths.toml"
 
 
+def _json_text(payload: Any) -> str:
+    """Serialize JSON as strict UTF-8 while preserving normal Unicode text."""
+
+    text = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+    return text.encode("utf-8", errors="backslashreplace").decode("utf-8")
+
+
 def _json_envelope(*, data: Any = None, error: dict[str, Any] | None = None) -> None:
     payload = {"ok": error is None, "data": data} if error is None else {"ok": False, "error": error}
-    print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+    print(_json_text(payload))
 
 
 def _json_data(data: Any, *, ok: bool) -> None:
-    print(json.dumps({"ok": ok, "data": data}, ensure_ascii=False, indent=2, default=str))
+    print(_json_text({"ok": ok, "data": data}))
 
 
 def _contract_error(error: ContractError) -> dict[str, Any]:
