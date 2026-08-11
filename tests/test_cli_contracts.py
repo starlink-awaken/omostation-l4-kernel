@@ -186,6 +186,22 @@ def test_content_audit_json_reports_invalid_archive_with_stable_code(tmp_path, m
     assert {item["code"] for item in payload["data"]["violations"]} == {"L4-CONTENT-011"}
 
 
+def test_content_audit_json_fails_closed_for_non_string_manifest_key(tmp_path, monkeypatch, capsys) -> None:
+    archive = tmp_path / "_archive" / "legacy"
+    archive.mkdir(parents=True)
+    (archive / "run.py").write_text("print('old')", encoding="utf-8")
+    (archive / "CONTENT_ARCHIVE.yaml").write_text("1: invalid\nschema: l4.content-archive/v1\n", encoding="utf-8")
+
+    try:
+        code, payload = invoke(monkeypatch, capsys, "content", "audit", str(tmp_path), "--json")
+    except (OSError, TypeError) as error:
+        pytest.fail(f"content audit must return a stable failure envelope, not raise: {error}")
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert {item["code"] for item in payload["data"]["violations"]} == {"L4-CONTENT-011"}
+
+
 def test_content_audit_rejects_missing_root(tmp_path, monkeypatch, capsys) -> None:
     missing = tmp_path / "missing"
 

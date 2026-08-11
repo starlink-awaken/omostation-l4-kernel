@@ -153,11 +153,7 @@ def classify_artifact(
     except OSError:
         executable = False
 
-    if parts & _CACHE_DIRS or suffix in _CACHE_SUFFIXES:
-        kind, reason = "cache", "derived cache or mutable local store belongs in Workspace"
-    elif _workspace_bridge(path_absolute):
-        kind, reason = "bridge", "thin compatibility bridge to a Workspace-owned capability"
-    elif name == ARCHIVE_MANIFEST_NAME.lower():
+    if name == ARCHIVE_MANIFEST_NAME.lower():
         archive = resolver.lookup(path_absolute)
         if archive is not None and not archive.ok:
             return ArtifactClassification(
@@ -168,6 +164,10 @@ def classify_artifact(
                 ARCHIVE_ISSUE_CODE,
             )
         kind, reason = "contract", "declares a frozen historical source archive"
+    elif parts & _CACHE_DIRS or suffix in _CACHE_SUFFIXES:
+        kind, reason = "cache", "derived cache or mutable local store belongs in Workspace"
+    elif _workspace_bridge(path_absolute):
+        kind, reason = "bridge", "thin compatibility bridge to a Workspace-owned capability"
     elif (archive := resolver.lookup(path_absolute)) is not None:
         if archive.ok:
             kind, reason = "content_archive", "frozen historical source material covered by CONTENT_ARCHIVE.yaml"

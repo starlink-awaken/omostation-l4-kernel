@@ -68,6 +68,18 @@ consumer_evidence:
     assert classify_artifact(tmp_path, cache).kind == "cache"
 
 
+def test_archive_manifest_inside_cache_is_contract_and_invalidates_audit(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / ".cache"
+    archive.mkdir(parents=True)
+    manifest = _write(archive, "CONTENT_ARCHIVE.yaml", "schema: l4.content-archive/v1\n")
+
+    result = classify_artifact(tmp_path, manifest)
+
+    assert result.kind == "contract"
+    assert result.code == "L4-CONTENT-011"
+    assert audit_content_plane(tmp_path).ok is False
+
+
 def test_audit_is_deterministic_and_runtime_or_cache_fail_closed(tmp_path: Path) -> None:
     root = tmp_path / "domain"
     root.mkdir()
