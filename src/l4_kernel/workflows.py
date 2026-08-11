@@ -16,6 +16,7 @@ from pathlib import Path
 from l4_kernel import DomainRegistry
 from l4_kernel.health import DomainHealth
 from l4_kernel.kems import CardsPlane
+from l4_kernel.path_policy import PathPolicyError, direct_mutation_allowed, mutation_denied, resolve_within
 from l4_kernel.plugins import get_plugin_registry
 from l4_kernel.signals import SignalBus
 from l4_kernel.skill_loader import (
@@ -90,6 +91,14 @@ class ScenarioEngine:
 
             try:
                 result = self._execute_step(step, **kwargs)
+                if isinstance(result, dict) and result.get("ok") is False:
+                    step_result["status"] = "error"
+                    step_result["result"] = result
+                    failed += 1
+                    results.append(step_result)
+                    if step.on_error == "stop":
+                        break
+                    continue
                 step_result["status"] = "ok"
                 step_result["result"] = result
                 completed += 1
@@ -213,7 +222,10 @@ class ScenarioEngine:
         )
 
     def _action_read_file(self, domain_path, target):
-        fp = domain_path / target
+        try:
+            fp = resolve_within(Path(domain_path), str(target))
+        except PathPolicyError as e:
+            return {"ok": False, "error": e.to_dict()}
         if not fp.exists():
             return {"status": "error", "message": f"File not found: {target}"}
         try:
@@ -223,11 +235,15 @@ class ScenarioEngine:
             return {"status": "error", "message": str(e)}
 
     def _action_write_file(self, domain_path, target, content=""):
-        fp = domain_path / target
+        if not direct_mutation_allowed():
+            return mutation_denied()
         try:
+            fp = resolve_within(Path(domain_path), str(target))
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")
             return {"status": "ok", "path": str(target), "size": len(content)}
+        except PathPolicyError as e:
+            return {"ok": False, "error": e.to_dict()}
         except OSError as e:
             return {"status": "error", "message": str(e)}
 
@@ -236,15 +252,18 @@ class ScenarioEngine:
         return {"status": "ok" if ok else "error", "message": message, "type": signal_type}
 
     def _action_create_entry(self, domain_path, parent_dir, title, content=""):
+        if not direct_mutation_allowed():
+            return mutation_denied()
         from datetime import date
 
         today = date.today().isoformat()
-        dir_path = domain_path / parent_dir
-        fp = dir_path / f"{today}-{title}.md"
         try:
-            dir_path.mkdir(parents=True, exist_ok=True)
+            fp = resolve_within(Path(domain_path), str(Path(parent_dir) / f"{today}-{title}.md"))
+            fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(f"# {title}\n\n{content}", encoding="utf-8")
             return {"status": "ok", "path": str(fp), "filename": fp.name}
+        except PathPolicyError as e:
+            return {"ok": False, "error": e.to_dict()}
         except OSError as e:
             return {"status": "error", "message": str(e)}
 
@@ -293,8 +312,14 @@ class ScenarioEngine:
             try:
                 wf_step = WorkflowStep(action, skill.get("description", ""), domain=domain_id)
                 exec_result = self._execute_step(wf_step, **{**params, **step_params, "path_override": target})
+                if isinstance(exec_result, dict) and exec_result.get("ok") is False:
+                    result["status"] = "error"
+                    result["result"] = exec_result
+                    failed += 1
+                    step_results.append(result)
+                    break
                 result["status"] = "ok"
-                result["result"] = str(exec_result)[:200]
+                result["result"] = exec_result
                 step_results.append(result)
             except Exception as e:  # defensive fallback
                 result["status"] = "error"

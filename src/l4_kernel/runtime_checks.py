@@ -4,12 +4,11 @@ Runtime Checks — 统一运行时检查
 从各域 _runtime/ 下沉，统一 signal_scan / freshness_check / meta_sync 能力。
 """
 
+from datetime import datetime
 from pathlib import Path
-from datetime import datetime, timedelta
-from typing import List, Dict
 
 
-def signal_scan(domain_root: Path) -> List[dict]:
+def signal_scan(domain_root: Path) -> list[dict]:
     """扫描域信号（统一实现）"""
     signals = []
     signals_file = Path(domain_root) / "_control" / "signals.md"
@@ -17,15 +16,17 @@ def signal_scan(domain_root: Path) -> List[dict]:
         content = signals_file.read_text(encoding="utf-8")
         for line in content.split("\n"):
             if line.startswith("- ") or line.startswith("* "):
-                signals.append({
-                    "content": line.strip("- *").strip(),
-                    "source": str(signals_file.relative_to(domain_root)),
-                    "timestamp": datetime.fromtimestamp(signals_file.stat().st_mtime).isoformat()
-                })
+                signals.append(
+                    {
+                        "content": line.strip("- *").strip(),
+                        "source": str(signals_file.relative_to(domain_root)),
+                        "timestamp": datetime.fromtimestamp(signals_file.stat().st_mtime).isoformat(),
+                    }
+                )
     return signals
 
 
-def freshness_check(domain_root: Path, days: int = 90) -> List[dict]:
+def freshness_check(domain_root: Path, days: int = 90) -> list[dict]:
     """检查过期文档（统一实现）"""
     stale = []
     knowledge_dir = Path(domain_root) / "_knowledge"
@@ -37,11 +38,13 @@ def freshness_check(domain_root: Path, days: int = 90) -> List[dict]:
                 continue
             mtime = md_file.stat().st_mtime
             if now - mtime > threshold:
-                stale.append({
-                    "file": str(md_file.relative_to(domain_root)),
-                    "days_old": int((now - mtime) / 86400),
-                    "last_modified": datetime.fromtimestamp(mtime).isoformat()
-                })
+                stale.append(
+                    {
+                        "file": str(md_file.relative_to(domain_root)),
+                        "days_old": int((now - mtime) / 86400),
+                        "last_modified": datetime.fromtimestamp(mtime).isoformat(),
+                    }
+                )
     stale.sort(key=lambda x: -x["days_old"])
     return stale
 

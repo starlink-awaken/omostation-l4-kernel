@@ -1,0 +1,19 @@
+apiVersion: l4/v1
+kind: DomainManifest
+id: vault
+display_name: Vault
+archetype: private-core
+space_ref: personal-space
+root: .
+owners:
+  - personal-space-owner
+principal_ref: personal-space-owner
+default_sensitivity: private
+default_visibility: private
+sharing_policy: explicit_publish
+retention: permanent
+authority_policy: canonical_write
+harness_profile_ref: harness://private-core/v1
+lifecycle: active
+policy_refs:
+  - policy://l4/phase0

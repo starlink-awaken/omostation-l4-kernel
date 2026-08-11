@@ -14,14 +14,21 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from l4_kernel import DomainRegistry
 from l4_kernel.claude_injector import ClaudeInjector
+from l4_kernel.config_loader import resolve_registry_path
+from l4_kernel.contracts import ContractError, load_domain_manifest
+from l4_kernel.harness import HarnessRunner
+from l4_kernel.harness_profiles import PROFILE_GATES
 from l4_kernel.health import DomainHealth
 from l4_kernel.kems import CardsPlane, KemsPlane
 from l4_kernel.lifecycle import DomainLifecycle
+from l4_kernel.manifest_registry import ManifestRegistry
+from l4_kernel.path_policy import PathPolicyError, direct_mutation_allowed, mutation_denied, resolve_within
 from l4_kernel.plugins import get_plugin_registry
 from l4_kernel.signals import SignalBus
 from l4_kernel.skill_loader import (
@@ -57,10 +64,9 @@ def _get_globals() -> dict:
     """
     global _globals
     if _globals is None:
-        from l4_kernel.cli import DEFAULT_CONFIG_PATH
-        from l4_kernel.config_loader import load_overrides_from_config
+        from l4_kernel.cli import _get_registry
 
-        registry = DomainRegistry(path_overrides=load_overrides_from_config(DEFAULT_CONFIG_PATH))
+        registry = _get_registry()
         _globals = {
             "registry": registry,
             "health": DomainHealth(registry),
@@ -103,6 +109,71 @@ def _ok(data: Any = None) -> str:
 
 def _err(msg: str) -> str:
     return json.dumps({"status": "error", "message": msg}, ensure_ascii=False, default=str)
+
+
+def _policy_err(error: PathPolicyError) -> str:
+    return json.dumps({"ok": False, "error": error.to_dict()}, ensure_ascii=False)
+
+
+def _mutation_err() -> str:
+    return json.dumps(mutation_denied(), ensure_ascii=False)
+
+
+def _contract_err(error: ContractError) -> str:
+    return json.dumps(
+        {
+            "ok": False,
+            "error": {
+                "code": error.code,
+                "message": error.message,
+                "path": str(error.path) if error.path is not None else None,
+            },
+        },
+        ensure_ascii=False,
+    )
+
+
+def l4_contract_validate(path: str) -> str:
+    """Validate one DomainManifest without mutating domain content."""
+
+    try:
+        manifest = load_domain_manifest(Path(path).expanduser())
+    except ContractError as error:
+        return _contract_err(error)
+    return json.dumps({"ok": True, "data": asdict(manifest)}, ensure_ascii=False, default=str)
+
+
+def l4_harness_run(domain_id: str, gates: str = "", registry_path: str = "") -> str:
+    """Run read-only deterministic gates for one explicit manifest domain."""
+
+    try:
+        explicit = Path(registry_path).expanduser() if registry_path else None
+        registry = ManifestRegistry.load(resolve_registry_path(explicit))
+    except FileNotFoundError as error:
+        return json.dumps(
+            {"ok": False, "error": {"code": "L4-CONFIG-002", "message": str(error), "path": None}},
+            ensure_ascii=False,
+        )
+    except ContractError as error:
+        return _contract_err(error)
+    manifest = registry.get(domain_id)
+    if manifest is None:
+        return json.dumps(
+            {
+                "ok": False,
+                "error": {
+                    "code": "L4-HARNESS-003",
+                    "message": f"domain not found: {domain_id}",
+                    "path": str(registry.index_path),
+                },
+            },
+            ensure_ascii=False,
+        )
+    selected = (
+        tuple(item.strip() for item in gates.split(",") if item.strip()) if gates else PROFILE_GATES[manifest.archetype]
+    )
+    health = HarnessRunner().run(manifest, selected)
+    return json.dumps({"ok": health.ok, "data": health.to_dict()}, ensure_ascii=False, default=str)
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -296,7 +367,11 @@ def l4_files_list(domain_id: str, plane: str = "_control", pattern: str = "") ->
     kems = _get_kems(domain_id)
     if not kems:
         return _err(f"Domain '{domain_id}' not available")
-    files = kems.list_files(plane)
+    try:
+        plane_path = resolve_within(kems.root, plane)
+    except PathPolicyError as e:
+        return _policy_err(e)
+    files = sorted(plane_path.rglob("*")) if plane_path.is_dir() else []
     result = [str(f.relative_to(kems.root)) for f in files]
     if pattern:
         result = [f for f in result if pattern.lower() in f.lower()]
@@ -520,11 +595,15 @@ def l4_file_write(domain_id: str, path: str, content: str) -> str:
     d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
-    fp = d.path / path
+    if not direct_mutation_allowed():
+        return _mutation_err()
     try:
+        fp = resolve_within(d.path, path)
         fp.parent.mkdir(parents=True, exist_ok=True)
         fp.write_text(content, encoding="utf-8")
         return _ok({"path": str(fp), "size": len(content)})
+    except PathPolicyError as e:
+        return _policy_err(e)
     except OSError as e:
         return _err(f"Write failed: {e}")
 
@@ -534,12 +613,16 @@ def l4_file_append(domain_id: str, path: str, content: str) -> str:
     d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
-    fp = d.path / path
+    if not direct_mutation_allowed():
+        return _mutation_err()
     try:
+        fp = resolve_within(d.path, path)
         fp.parent.mkdir(parents=True, exist_ok=True)
-        with open(fp, "a", encoding="utf-8") as f:
+        with fp.open("a", encoding="utf-8") as f:
             f.write(content)
         return _ok({"path": str(fp), "mode": "append"})
+    except PathPolicyError as e:
+        return _policy_err(e)
     except OSError as e:
         return _err(f"Append failed: {e}")
 
@@ -549,7 +632,10 @@ def l4_file_read(domain_id: str, path: str) -> str:
     d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
-    fp = d.path / path
+    try:
+        fp = resolve_within(d.path, path)
+    except PathPolicyError as e:
+        return _policy_err(e)
     if not fp.exists():
         return _err(f"File not found: {fp}")
     try:
@@ -563,15 +649,18 @@ def l4_entry_create(domain_id: str, parent_dir: str, name: str, content: str) ->
     d = _get_globals()["registry"].get(domain_id)
     if not d or not d.exists():
         return _err(f"Domain '{domain_id}' not available")
+    if not direct_mutation_allowed():
+        return _mutation_err()
     from datetime import date
 
     today = date.today().isoformat()
-    dir_path = d.path / parent_dir
-    fp = dir_path / f"{today}-{name}.md"
     try:
-        dir_path.mkdir(parents=True, exist_ok=True)
+        fp = resolve_within(d.path, str(Path(parent_dir) / f"{today}-{name}.md"))
+        fp.parent.mkdir(parents=True, exist_ok=True)
         fp.write_text(content, encoding="utf-8")
         return _ok({"path": str(fp), "filename": fp.name, "date": today})
+    except PathPolicyError as e:
+        return _policy_err(e)
     except OSError as e:
         return _err(f"Create entry failed: {e}")
 
@@ -650,7 +739,7 @@ from l4_kernel.consistency import check_consistency
 
 def l4_check_consistency() -> str:
     """三源一致性校验。"""
-    return json.dumps(check_consistency(), ensure_ascii=False, default=str)
+    return json.dumps(check_consistency(_get_globals()["registry"]), ensure_ascii=False, default=str)
 
     # ═════════════════════════════════════════════════════════════════════
     # Config/Tool/Storage/Model/Engine 域操作 (8 tools)
@@ -674,9 +763,14 @@ def l4_config_read(domain_id: str, path: str) -> str:
     d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
+    try:
+        contained = resolve_within(d.path, path)
+    except PathPolicyError as error:
+        return _policy_err(error)
+    relative = str(contained.relative_to(d.path.resolve()))
     w = wrap_domain(d)
     if hasattr(w, "read_config"):
-        data = w.read_config(path)  # type: ignore[reportAttributeAccessIssue]
+        data = w.read_config(relative)  # type: ignore[reportAttributeAccessIssue]
         return json.dumps(data, ensure_ascii=False, default=str) if data else _err("Config not found")
     return _err(f"Domain '{domain_id}' is not a config domain")
 
@@ -740,9 +834,14 @@ def l4_engine_logs(domain_id: str, log_file: str = "daemon.log", lines: int = 20
     d = _get_globals()["registry"].get(domain_id)
     if not d:
         return _err(f"Domain '{domain_id}' not found")
+    try:
+        contained = resolve_within(d.path, log_file)
+    except PathPolicyError as error:
+        return _policy_err(error)
+    relative = str(contained.relative_to(d.path.resolve()))
     w = wrap_domain(d)
     if hasattr(w, "get_logs"):
-        return json.dumps(w.get_logs(log_file, lines), ensure_ascii=False, default=str)  # type: ignore[reportAttributeAccessIssue]
+        return json.dumps(w.get_logs(relative, lines), ensure_ascii=False, default=str)  # type: ignore[reportAttributeAccessIssue]
     return _err(f"Domain '{domain_id}' is not an engine domain")
 
 
@@ -766,6 +865,9 @@ def l4_workspace_search(domain_id: str, pattern: str) -> str:
 TOOLS = {
     # 系统
     "l4_reload": lambda: json.dumps(_reload_globals(), ensure_ascii=False),
+    # Phase 0 read-only contract surface
+    "l4_contract_validate": l4_contract_validate,
+    "l4_harness_run": l4_harness_run,
     # 域管理 (7)
     "l4_domains_list": l4_domains_list,
     "l4_domain_info": l4_domain_info,

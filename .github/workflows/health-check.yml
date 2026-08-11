@@ -22,6 +22,8 @@ on:
 jobs:
   health-check:
     runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     strategy:
       matrix:
         python-version: ['3.13']
@@ -39,32 +41,58 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Install dependencies
+        # Private bridge repositories are intentionally absent here. Core mode
+        # exercises the documented ImportError fallback; monorepo gates cover
+        # the fully integrated topology.
         run: |
-          cd projects/l4-kernel
-          uv sync
+          uv venv --clear --python ${{ matrix.python-version }}
+          uv pip install "pyyaml>=6.0.3" "fastmcp>=3.4.2" "pytest>=9.0.3" "ruff>=0.8"
+          uv pip install --no-deps -e .
 
       - name: Run tests
+        run: uv run --no-sync pytest tests/ -q --tb=short
+
+      - name: Prepare health fixture
         run: |
-          cd projects/l4-kernel
-          uv run pytest tests/ -q --tb=short
+          uv run --no-sync python - <<'PY'
+          from datetime import UTC, datetime
+          from pathlib import Path
+
+          from l4_kernel.kems import KemsPlane
+          from l4_kernel.registry import _BUILTIN_DOMAINS
+          from l4_kernel.templates import init_domain_kems
+          from l4_kernel.testing import default_overrides
+
+          fixture_root = Path(".ci-health")
+          overrides = default_overrides(fixture_root)
+          now = datetime.now(UTC).isoformat()
+          for domain in _BUILTIN_DOMAINS:
+              if domain.domain_type != "document":
+                  continue
+              domain_root = overrides[domain.id]
+              init_domain_kems(domain_root, domain_name=domain.name, owner="ci")
+              KemsPlane(domain_root).append_signal(
+                  {"ts": now, "type": "✅", "source": "ci.health-fixture", "message": "fixture ready"}
+              )
+
+          lines = ["[domain_paths]"]
+          lines.extend(f'{domain_id} = "{domain_path}"' for domain_id, domain_path in overrides.items())
+          Path("l4_domain_paths.toml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
 
       - name: Run health check
-        run: |
-          cd projects/l4-kernel
-          python scripts/health_monitor.py --output json > health_report.json
-        continue-on-error: true
+        run: uv run --no-sync python scripts/health_monitor.py --output json > health_report.json
 
       - name: Upload health report
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: health-report
-          path: projects/l4-kernel/health_report.json
+          path: health_report.json
           retention-days: 30
 
       - name: Check health status
         run: |
-          cd projects/l4-kernel
           if [ -f health_report.json ]; then
             python3 -c "
           import json
@@ -83,9 +111,8 @@ jobs:
               print(f'所有 {data[\"total_domains\"]} 个域健康状态正常')
           "
           fi
-
       - name: Send notification on failure
-        if: failure()
+        if: ${{ failure() && env.SLACK_WEBHOOK_URL != '' }}
         uses: 8398a7/action-slack@v3
         with:
           status: failure
@@ -96,5 +123,3 @@ jobs:
             Branch: ${{ github.ref }}
             Commit: ${{ github.sha }}
             Author: ${{ github.actor }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

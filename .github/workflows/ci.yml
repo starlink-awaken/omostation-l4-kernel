@@ -10,18 +10,25 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout l4-kernel
+        uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
           python-version: "3.13"
       - name: Install dependencies
-        run: uv sync
+        # The bridge packages live in private sibling repositories. Standalone
+        # CI verifies the kernel's optional-bridge fallback without cross-repo
+        # credentials; the Documents root gate covers integrated execution.
+        run: |
+          uv venv --clear --python 3.13
+          uv pip install "pyyaml>=6.0.3" "fastmcp>=3.4.2" "pytest>=9.0.3" "ruff>=0.8"
+          uv pip install --no-deps -e .
       - name: Ruff check
-        run: uv run ruff check src/
+        run: uv run --no-sync ruff check src/
       - name: Ruff format check
-        run: uv run ruff format src/ --check
+        run: uv run --no-sync ruff format src/ --check
 
   test:
     # 2026-07-02: 加 macOS 矩阵 — test_check_process(launchd) 仅 darwin 运行(已加 skipif),
@@ -31,13 +38,17 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout l4-kernel
+        uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
           python-version: "3.13"
       - name: Install dependencies
-        run: uv sync
+        run: |
+          uv venv --clear --python 3.13
+          uv pip install "pyyaml>=6.0.3" "fastmcp>=3.4.2" "pytest>=9.0.3" "ruff>=0.8"
+          uv pip install --no-deps -e .
       - name: Run tests
-        run: uv run pytest tests/ -q --tb=short
+        run: uv run --no-sync pytest tests/ -q --tb=short

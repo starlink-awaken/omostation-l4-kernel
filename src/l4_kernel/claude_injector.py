@@ -8,9 +8,12 @@
 
 from __future__ import annotations
 
+import logging
 import re
 
 from l4_kernel.registry import DomainRegistry
+
+LOGGER = logging.getLogger(__name__)
 
 # ── Schema 约束注入模板 ──────────────────────────────────────────
 
@@ -311,13 +314,17 @@ def generate_telos_context() -> str:
     for tf in sorted(telos_dir.glob("*.md")):
         try:
             lines = tf.read_text(encoding="utf-8").strip().split("\n")
-            meaningful = [l.strip() for l in lines
-                          if l.strip() and not l.startswith("#") and not l.startswith("---")][:5]
+            meaningful = [
+                line.strip()
+                for line in lines
+                if line.strip() and not line.startswith("#") and not line.startswith("---")
+            ][:5]
             if meaningful:
                 category = tf.stem.upper()
                 summary = " | ".join(meaningful)[:300]
                 sections.append(f"### {category}\n{summary}")
-        except Exception:
+        except (OSError, UnicodeError) as exc:
+            LOGGER.warning("Skipping unreadable TELOS file %s: %s", tf, exc)
             continue
 
     if not sections:
@@ -349,6 +356,7 @@ def inject_telos_to_claude_md(target_path: str) -> dict:
     if marker in content:
         # Replace existing injection
         import re
+
         pattern = re.compile(
             r"<!-- TELOS-INJECTION -->.*?<!-- /TELOS-INJECTION -->",
             re.DOTALL,

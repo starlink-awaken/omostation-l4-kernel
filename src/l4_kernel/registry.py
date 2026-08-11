@@ -14,6 +14,7 @@ P52 治本: Domain.path 来源 (3 层优先级)
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
@@ -25,11 +26,12 @@ DomainType = Literal["document", "config", "engine", "tool", "workspace", "stora
 @dataclass
 class ToolManifest:
     """工具清单条目。"""
-    name: str                          # 工具文件名 (如 "controller.py")
-    path: Path                         # 绝对路径
-    tool_type: str                     # "controller" | "extractor" | "predictor" | "ocr" | "script" | "other"
-    domain_id: str                     # 所属域 ID
-    description: str = ""              # 功能描述
+
+    name: str  # 工具文件名 (如 "controller.py")
+    path: Path  # 绝对路径
+    tool_type: str  # "controller" | "extractor" | "predictor" | "ocr" | "script" | "other"
+    domain_id: str  # 所属域 ID
+    description: str = ""  # 功能描述
 
     def to_dict(self) -> dict:
         return {
@@ -69,6 +71,7 @@ class Domain:
             "governance_tier": self.governance_tier,
             "capabilities": self.capabilities,
             "tools": [t.to_dict() for t in self.tools],
+            "exists": self.exists(),
         }
 
 
@@ -460,6 +463,14 @@ class DomainRegistry:
             d = replace(d, path=path_overrides[d.id])
             self._domains[d.id] = d
 
+    @classmethod
+    def from_domains(cls, domains: Iterable[Domain]) -> DomainRegistry:
+        """Build a registry from already validated domains without builtin expansion."""
+
+        instance = cls.__new__(cls)
+        instance._domains = {domain.id: domain for domain in domains}
+        return instance
+
     @staticmethod
     def require_explicit() -> DomainRegistry:
         """失败助手: 用于 class 构造中的 `or DomainRegistry()` 模式。
@@ -541,13 +552,15 @@ class DomainRegistry:
             for f in sorted(scan_dir.iterdir()):
                 if f.suffix == suffix and not f.name.startswith("_"):
                     tool_type = self._classify_tool_name(f.name)
-                    tools.append(ToolManifest(
-                        name=f.name,
-                        path=f,
-                        tool_type=tool_type,
-                        domain_id=domain_id,
-                        description=self._describe_tool(f.name, tool_type),
-                    ))
+                    tools.append(
+                        ToolManifest(
+                            name=f.name,
+                            path=f,
+                            tool_type=tool_type,
+                            domain_id=domain_id,
+                            description=self._describe_tool(f.name, tool_type),
+                        )
+                    )
 
         for t in tools:
             self.register_tool(domain_id, t)

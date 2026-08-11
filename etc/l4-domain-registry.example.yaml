@@ -1,0 +1,12 @@
+apiVersion: l4/v1
+kind: DomainRegistry
+id: example-l4-domain-registry
+display_name: Example L4 Knowledge Domains
+space_ref: personal-space
+status: active
+path_base: registry_file_parent
+manifests:
+  - id: vault
+    path: ../documents/vault/DOMAIN.yaml
+  - id: personal
+    path: ../documents/personal/DOMAIN.yaml

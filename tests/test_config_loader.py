@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from l4_kernel.config_loader import load_overrides_from_config
+from l4_kernel.config_loader import load_overrides_from_config, resolve_registry_path
 
 
 def test_missing_config_explains_current_bootstrap_contract(tmp_path: Path):
@@ -18,3 +18,10 @@ def test_config_loader_reads_domain_paths(tmp_path: Path):
     config.write_text('[domain_paths]\ncockpit = "/tmp/cockpit"\n', encoding="utf-8")
 
     assert load_overrides_from_config(config) == {"cockpit": Path("/tmp/cockpit").resolve()}
+
+
+def test_registry_path_resolution_does_not_use_legacy_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    registry = tmp_path / "registry.yaml"
+    monkeypatch.setenv("L4_DOMAIN_REGISTRY", str(registry))
+
+    assert resolve_registry_path() == registry.resolve()

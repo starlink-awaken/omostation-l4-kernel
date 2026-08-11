@@ -18,6 +18,7 @@ aggregate_health 如实测量 — 未挂载卷/尚未创建的域是被测量的
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -25,6 +26,17 @@ try:
     import tomllib  # Python 3.11+
 except ImportError:
     import tomli as tomllib  # type: ignore[import-not-found]
+
+
+def resolve_registry_path(explicit: Path | None = None) -> Path:
+    """Resolve the manifest registry from an argument or L4_DOMAIN_REGISTRY."""
+
+    if explicit is not None:
+        return explicit.expanduser().resolve()
+    env_value = os.environ.get("L4_DOMAIN_REGISTRY")
+    if env_value:
+        return Path(env_value).expanduser().resolve()
+    raise FileNotFoundError("L4 domain registry not configured; pass --registry or set L4_DOMAIN_REGISTRY")
 
 
 def load_overrides_from_config(config_path: Path) -> dict[str, Path]:

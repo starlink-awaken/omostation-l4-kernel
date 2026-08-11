@@ -17,7 +17,9 @@ from typing import Any
 
 import yaml
 
-from l4_kernel.registry import DomainRegistry
+from l4_kernel.contracts import DomainManifest
+from l4_kernel.manifest_registry import ManifestRegistry
+from l4_kernel.registry import Domain, DomainRegistry
 
 # ═════════════════════════════════════════════════════════════════════
 # 路径定义
@@ -83,16 +85,21 @@ def load_domain_index() -> list[dict[str, str]] | None:
 # ═════════════════════════════════════════════════════════════════════
 
 
-def check_consistency() -> dict[str, Any]:
-    """三源一致性校验。
+def _domain_name(domain: Domain | DomainManifest) -> str:
+    return domain.name if isinstance(domain, Domain) else domain.display_name
 
-    Returns:
-        {"status": "ok"|"diff", "total": N, "diff_count": N, "differences": [...]}
-    """
-    registry = DomainRegistry.require_explicit()
-    registry_domains = registry.list_all()
-    vault_paths = load_vault_paths()
-    index_domains = load_domain_index()
+
+def _domain_path(domain: Domain | DomainManifest) -> Path:
+    return domain.path if isinstance(domain, Domain) else domain.root
+
+
+def compare_registry_sources(
+    *,
+    registry_domains: list[Domain] | list[DomainManifest],
+    vault_paths: dict[str, str] | None,
+    index_domains: list[dict[str, str]] | None,
+) -> dict[str, Any]:
+    """Pure comparison preserving the legacy difference envelope."""
 
     diffs = []
     registry_ids = {d.id for d in registry_domains}
@@ -111,8 +118,8 @@ def check_consistency() -> dict[str, Any]:
                         "type": "registry_only",
                         "domain": d.id,
                         "source": "registry.py",
-                        "detail": f"已在 registry.py 注册 ({d.name}), 但 vault-paths.yaml 无 {expected_key} 路径",
-                        "fix": f"vault-paths.yaml 添加 {expected_key}: {d.path}",
+                        "detail": f"已在 registry 注册 ({_domain_name(d)}), 但 vault-paths.yaml 无 {expected_key} 路径",
+                        "fix": f"vault-paths.yaml 添加 {expected_key}: {_domain_path(d)}",
                     }
                 )
 
@@ -124,7 +131,7 @@ def check_consistency() -> dict[str, Any]:
                     "type": "registry_only",
                     "domain": d.id,
                     "source": "DOMAIN-INDEX.md",
-                    "detail": f"已在 registry.py 注册 ({d.name}), 但 DOMAIN-INDEX.md 无此域",
+                    "detail": f"已在 registry 注册 ({_domain_name(d)}), 但 DOMAIN-INDEX.md 无此域",
                     "fix": "DOMAIN-INDEX.md 添加一行",
                 }
             )
@@ -153,7 +160,7 @@ def check_consistency() -> dict[str, Any]:
                 vault_path = vault_paths[expected_key]
                 if vault_path and vault_path != "null" and vault_path != "None":
                     expanded_vault = os.path.expanduser(str(vault_path))
-                    registry_path = str(d.path)
+                    registry_path = str(_domain_path(d))
                     # 只比较最后两级目录
                     v_parts = expanded_vault.rstrip("/").split("/")[-2:]
                     r_parts = registry_path.rstrip("/").split("/")[-2:]
@@ -176,3 +183,13 @@ def check_consistency() -> dict[str, Any]:
         "differences": diffs,
         "status": "ok" if len(diffs) == 0 else "diff",
     }
+
+
+def check_consistency(registry: DomainRegistry | ManifestRegistry) -> dict[str, Any]:
+    """Compare an explicitly provided registry with legacy projection sources."""
+
+    return compare_registry_sources(
+        registry_domains=registry.list_all(),
+        vault_paths=load_vault_paths(),
+        index_domains=load_domain_index(),
+    )
