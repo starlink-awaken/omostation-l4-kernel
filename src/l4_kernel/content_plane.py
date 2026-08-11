@@ -126,10 +126,9 @@ class ContentPlaneReport:
 def _workspace_bridge(path: Path) -> bool:
     if path.suffix.lower() not in _RUNTIME_SUFFIXES:
         return False
-    try:
-        return BRIDGE_MARKER in path.read_text(encoding="utf-8", errors="ignore")[:1024]
-    except OSError:
-        return False
+    content_archive._stability_hook("workspace-bridge:before-read", path)
+    payload, _ = content_archive._stable_read_regular(path, max_bytes=1024)
+    return BRIDGE_MARKER in payload.decode("utf-8", errors="ignore")
 
 
 def _auditable_file(path: Path) -> bool:
@@ -202,23 +201,28 @@ def classify_artifact(
         return _invalid_node(path_absolute, relative, "unsupported filesystem node in content plane")
     elif parts & _CACHE_DIRS or suffix in _CACHE_SUFFIXES:
         kind, reason = "cache", "derived cache or mutable local store belongs in Workspace"
-    elif _workspace_bridge(path_absolute):
-        kind, reason = "bridge", "thin compatibility bridge to a Workspace-owned capability"
-    elif (archive := resolver.lookup(path_absolute)) is not None:
-        if archive.ok:
-            kind, reason = "content_archive", "frozen historical source material covered by CONTENT_ARCHIVE.yaml"
-        else:
-            kind, reason = "invalid_archive", f"invalid CONTENT_ARCHIVE.yaml: {archive.message}"
-    elif suffix in _RUNTIME_SUFFIXES or (executable and not suffix):
-        kind, reason = "runtime", "executable implementation belongs in Workspace"
-    elif name_lower in _PROJECTION_NAMES or "_generated" in parts or "generated" in parts:
-        kind, reason = "projection", "mutable or generated view must not become canonical truth"
-    elif name_lower in _CONTRACT_NAMES or parts & _CONTRACT_DIRS:
-        kind, reason = "contract", "declarative domain constitution or semantic contract"
-    elif "_control" in parts and suffix in {".json", ".toml", ".yaml", ".yml"}:
-        kind, reason = "contract", "declarative control-plane contract"
     else:
-        kind, reason = "content", "canonical human-readable content or source material"
+        try:
+            workspace_bridge = _workspace_bridge(path_absolute)
+        except ContentArchiveValidationError as error:
+            return _invalid_node(path_absolute, relative, str(error))
+        if workspace_bridge:
+            kind, reason = "bridge", "thin compatibility bridge to a Workspace-owned capability"
+        elif (archive := resolver.lookup(path_absolute)) is not None:
+            if archive.ok:
+                kind, reason = "content_archive", "frozen historical source material covered by CONTENT_ARCHIVE.yaml"
+            else:
+                kind, reason = "invalid_archive", f"invalid CONTENT_ARCHIVE.yaml: {archive.message}"
+        elif suffix in _RUNTIME_SUFFIXES or (executable and not suffix):
+            kind, reason = "runtime", "executable implementation belongs in Workspace"
+        elif name_lower in _PROJECTION_NAMES or "_generated" in parts or "generated" in parts:
+            kind, reason = "projection", "mutable or generated view must not become canonical truth"
+        elif name_lower in _CONTRACT_NAMES or parts & _CONTRACT_DIRS:
+            kind, reason = "contract", "declarative domain constitution or semantic contract"
+        elif "_control" in parts and suffix in {".json", ".toml", ".yaml", ".yml"}:
+            kind, reason = "contract", "declarative control-plane contract"
+        else:
+            kind, reason = "content", "canonical human-readable content or source material"
 
     return ArtifactClassification(path_absolute, relative, kind, reason)
 

@@ -133,7 +133,7 @@ def _same_tree(first: _TreeSnapshot, second: _TreeSnapshot) -> bool:
     return first.root_metadata == second.root_metadata and first.fingerprint == second.fingerprint
 
 
-def _stable_read_regular(path: Path) -> tuple[bytes, tuple[int, ...]]:
+def _stable_read_regular(path: Path, *, max_bytes: int | None = None) -> tuple[bytes, tuple[int, ...]]:
     """Read one regular file through a no-follow fd and verify its stable identity."""
 
     if not hasattr(os, "O_NOFOLLOW"):
@@ -154,8 +154,15 @@ def _stable_read_regular(path: Path) -> tuple[bytes, tuple[int, ...]]:
         if not stat.S_ISREG(before.st_mode) or _stat_metadata(path_before) != _stat_metadata(before):
             raise ContentArchiveValidationError(f"archive entry identity changed before read: {path}")
         chunks: list[bytes] = []
-        while chunk := os.read(descriptor, 1024 * 1024):
+        remaining = max_bytes
+        while remaining is None or remaining > 0:
+            read_size = 1024 * 1024 if remaining is None else min(1024 * 1024, remaining)
+            chunk = os.read(descriptor, read_size)
+            if not chunk:
+                break
             chunks.append(chunk)
+            if remaining is not None:
+                remaining -= len(chunk)
         _stability_hook("read:after", path)
         after = os.fstat(descriptor)
         path_after = path.lstat()

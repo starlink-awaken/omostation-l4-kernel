@@ -42,6 +42,29 @@ def test_workspace_bridge_marker_is_not_reported_as_runtime(tmp_path: Path) -> N
     assert "Workspace" in result.reason
 
 
+def test_workspace_bridge_swap_to_external_symlink_fails_without_following(tmp_path: Path, monkeypatch) -> None:
+    domain = tmp_path / "domain"
+    domain.mkdir()
+    bridge = _write(domain, "bridge.py", "# l4-content-plane: workspace-bridge\n")
+    external = _write(tmp_path, "external.py", "# l4-content-plane: workspace-bridge\n")
+    swapped = False
+
+    def replace_bridge_with_symlink(stage: str, path: Path) -> None:
+        nonlocal swapped
+        if stage == "workspace-bridge:before-read" and path == bridge and not swapped:
+            bridge.unlink()
+            bridge.symlink_to(external)
+            swapped = True
+
+    monkeypatch.setattr(content_archive, "_stability_hook", replace_bridge_with_symlink)
+
+    result = classify_artifact(domain, bridge)
+
+    assert swapped is True
+    assert result.kind == "invalid_archive"
+    assert result.code == "L4-CONTENT-011"
+
+
 def test_cache_keeps_priority_over_valid_content_archive(tmp_path: Path) -> None:
     archive = tmp_path / "_archive" / "legacy"
     cache = archive / "nested" / "state.sqlite"
