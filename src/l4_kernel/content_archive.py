@@ -87,7 +87,7 @@ def _inventory(root: Path) -> dict[str, int | str]:
             is_link = stat.S_ISLNK(path_stat.st_mode)
             if is_link:
                 try:
-                    if path.is_dir():
+                    if path.is_dir() and path.name != ARCHIVE_MANIFEST_NAME:
                         continue
                 except OSError as error:
                     raise ContentArchiveValidationError(f"cannot inspect archive symlink: {path}") from error
@@ -108,7 +108,7 @@ def _inventory(root: Path) -> dict[str, int | str]:
         size = len(payload)
         digest_payload = b"symlink\0" + payload if is_link else payload
         total_bytes += size
-        tree.update(relative.encode("utf-8"))
+        tree.update(os.fsencode(relative))
         tree.update(b"\0")
         tree.update(str(size).encode("ascii"))
         tree.update(b"\0")
@@ -188,6 +188,7 @@ class ContentArchiveResolver:
     def __init__(self, root: Path) -> None:
         self.root = root.expanduser().absolute()
         self._results: dict[Path, ArchiveValidation] = {}
+        self._manifests: dict[Path, Path | None] = {}
 
     def lookup(self, path: Path) -> ArchiveValidation | None:
         current = path.expanduser().absolute().parent
@@ -196,14 +197,19 @@ class ContentArchiveResolver:
                 current.relative_to(self.root)
             except ValueError:
                 return None
-            manifest = current / ARCHIVE_MANIFEST_NAME
-            try:
-                manifest.lstat()
-            except FileNotFoundError:
-                pass
-            except OSError as error:
-                return self._invalid(current, manifest, f"cannot inspect CONTENT_ARCHIVE.yaml: {error}")
-            else:
+            if current not in self._manifests:
+                try:
+                    self._manifests[current] = next(
+                        (candidate for candidate in current.iterdir() if candidate.name == ARCHIVE_MANIFEST_NAME), None
+                    )
+                except OSError as error:
+                    return self._invalid(
+                        current,
+                        current / ARCHIVE_MANIFEST_NAME,
+                        f"cannot inspect CONTENT_ARCHIVE.yaml: {error}",
+                    )
+            manifest = self._manifests[current]
+            if manifest is not None:
                 return self._validate(current, manifest)
             if current == self.root:
                 return None

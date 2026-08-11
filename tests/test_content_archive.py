@@ -26,7 +26,7 @@ def _inventory(root: Path) -> dict[str, int | str]:
         contents = os.fsencode(os.readlink(path)) if path.is_symlink() else path.read_bytes()
         total_bytes += len(contents)
         digest_contents = b"symlink\0" + contents if path.is_symlink() else contents
-        digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+        digest.update(os.fsencode(path.relative_to(root).as_posix()))
         digest.update(b"\0")
         digest.update(str(len(contents)).encode("ascii"))
         digest.update(b"\0")
@@ -187,6 +187,59 @@ def test_manifest_symlink_to_directory_is_audited_as_invalid_contract(tmp_path: 
     assert report.ok is False
     assert any(item.kind == "contract" and item.code == "L4-CONTENT-011" for item in report.artifacts)
     assert "_archive/old-tools/CONTENT_ARCHIVE.yaml/secret.py" not in {item.relative_path for item in report.artifacts}
+
+
+def test_nested_manifest_directory_symlink_drifts_parent_inventory(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    target = tmp_path / "outside"
+    archive.mkdir(parents=True)
+    source = archive / "run.py"
+    source.write_text("print('old')\n", encoding="utf-8")
+    _write_archive_manifest(archive)
+    target.mkdir()
+    (target / "secret.py").write_text("print('outside')\n", encoding="utf-8")
+    nested = archive / "nested" / "CONTENT_ARCHIVE.yaml"
+    nested.parent.mkdir()
+    nested.symlink_to(target, target_is_directory=True)
+
+    report = audit_content_plane(tmp_path)
+
+    by_path = {item.relative_path: item for item in report.artifacts}
+    assert by_path["_archive/old-tools/run.py"].code == "L4-CONTENT-011"
+    assert by_path["_archive/old-tools/nested/CONTENT_ARCHIVE.yaml"].code == "L4-CONTENT-011"
+    assert "_archive/old-tools/nested/CONTENT_ARCHIVE.yaml/secret.py" not in by_path
+
+
+@pytest.mark.skipif(os.name != "posix", reason="surrogateescaped filenames require POSIX filesystem semantics")
+def test_surrogateescaped_filename_hashes_without_traceback_and_detects_drift(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    archive.mkdir(parents=True)
+    filename = os.fsdecode(b"legacy-\xff.py")
+    source = archive / filename
+    try:
+        source.write_text("print('old')\n", encoding="utf-8")
+    except OSError as error:
+        pytest.skip(f"filesystem rejects surrogateescaped POSIX names: {error}")
+    _write_archive_manifest(archive)
+
+    try:
+        assert classify_artifact(tmp_path, source).kind == "content_archive"
+    except UnicodeError as error:
+        pytest.fail(f"surrogateescaped filename must not raise: {error}")
+    source.write_text("print('changed')\n", encoding="utf-8")
+    assert classify_artifact(tmp_path, source).code == "L4-CONTENT-011"
+
+
+def test_lowercase_archive_filename_is_not_a_manifest_contract(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / "old-tools"
+    archive.mkdir(parents=True)
+    lower_manifest = archive / "content_archive.yaml"
+    lower_manifest.write_text("schema: l4.content-archive/v1\n", encoding="utf-8")
+
+    result = classify_artifact(tmp_path, lower_manifest)
+
+    assert result.kind == "content"
+    assert result.code is None
 
 
 @pytest.mark.parametrize("captured_at", ["2026-08-11", "2026-08-11T00:00:00"])

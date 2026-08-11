@@ -146,7 +146,8 @@ def classify_artifact(
     path_absolute = path.expanduser().absolute()
     relative = path_absolute.relative_to(root_absolute).as_posix()
     parts = {part.lower() for part in Path(relative).parts}
-    name = path_absolute.name.lower()
+    name = path_absolute.name
+    name_lower = name.lower()
     suffix = path_absolute.suffix.lower()
     resolver = archive_resolver or ContentArchiveResolver(root_absolute)
 
@@ -155,7 +156,7 @@ def classify_artifact(
     except OSError:
         executable = False
 
-    if name == ARCHIVE_MANIFEST_NAME.lower():
+    if name == ARCHIVE_MANIFEST_NAME:
         archive = resolver.lookup(path_absolute)
         if archive is not None and not archive.ok:
             return ArtifactClassification(
@@ -177,9 +178,9 @@ def classify_artifact(
             kind, reason = "invalid_archive", f"invalid CONTENT_ARCHIVE.yaml: {archive.message}"
     elif suffix in _RUNTIME_SUFFIXES or (executable and not suffix):
         kind, reason = "runtime", "executable implementation belongs in Workspace"
-    elif name in _PROJECTION_NAMES or "_generated" in parts or "generated" in parts:
+    elif name_lower in _PROJECTION_NAMES or "_generated" in parts or "generated" in parts:
         kind, reason = "projection", "mutable or generated view must not become canonical truth"
-    elif name in _CONTRACT_NAMES or parts & _CONTRACT_DIRS:
+    elif name_lower in _CONTRACT_NAMES or parts & _CONTRACT_DIRS:
         kind, reason = "contract", "declarative domain constitution or semantic contract"
     elif "_control" in parts and suffix in {".json", ".toml", ".yaml", ".yml"}:
         kind, reason = "contract", "declarative control-plane contract"
