@@ -75,6 +75,46 @@ def _manifest_registry(args: list[str]) -> ManifestRegistry:
     return ManifestRegistry.load(resolve_registry_path(Path(explicit) if explicit else None))
 
 
+def _domain_validate_manifest_options(args: list[str]) -> tuple[str, Path | None]:
+    """Parse the formal owner command without inheriting legacy option leniency."""
+
+    usage = "usage: domain validate-manifest DOMAIN_ID [--registry PATH] [--json]"
+    if not args or args[0].startswith("--"):
+        raise ValueError(usage)
+
+    domain_id = args[0]
+    registry_path: Path | None = None
+    seen_registry = False
+    seen_json = False
+    index = 1
+    while index < len(args):
+        value = args[index]
+        if value == "--json":
+            if seen_json:
+                raise ValueError("--json may be specified only once")
+            seen_json = True
+            index += 1
+            continue
+        if value == "--registry":
+            if seen_registry or index + 1 >= len(args) or args[index + 1].startswith("--"):
+                raise ValueError("--registry requires exactly one path")
+            registry_path = Path(args[index + 1])
+            seen_registry = True
+            index += 2
+            continue
+        if value.startswith("--registry="):
+            explicit = value.split("=", 1)[1]
+            if seen_registry or not explicit:
+                raise ValueError("--registry requires exactly one path")
+            registry_path = Path(explicit)
+            seen_registry = True
+            index += 1
+            continue
+        raise ValueError(f"unexpected argument: {value}")
+
+    return domain_id, registry_path
+
+
 def _get_registry(config_path: Path | None = None) -> DomainRegistry:
     """Load the manifest registry, with explicit legacy compatibility only."""
 
@@ -344,6 +384,42 @@ def cmd_registry(args: list[str]) -> int:
     return 0
 
 
+def cmd_domain_validate_manifest(args: list[str]) -> int:
+    """Validate one registered DomainManifest by authoritative domain ID."""
+
+    try:
+        domain_id, explicit_registry = _domain_validate_manifest_options(args)
+    except ValueError as error:
+        _json_envelope(
+            error={
+                "code": "L4-CONFIG-002",
+                "message": str(error),
+                "path": None,
+            }
+        )
+        return 2
+    try:
+        registry = ManifestRegistry.load(resolve_registry_path(explicit_registry))
+    except FileNotFoundError as error:
+        _json_envelope(error={"code": "L4-CONFIG-002", "message": str(error), "path": None})
+        return 2
+    except ContractError as error:
+        _json_envelope(error=_contract_error(error))
+        return 2
+    manifest = registry.get(domain_id)
+    if manifest is None:
+        _json_envelope(
+            error={
+                "code": "L4-CONTRACT-004",
+                "message": f"domain is not registered: {domain_id}",
+                "path": str(registry.index_path),
+            }
+        )
+        return 1
+    _json_envelope(data=asdict(manifest))
+    return 0
+
+
 def cmd_harness(args: list[str]) -> int:
     """Run read-only deterministic gates for one registered domain."""
 
@@ -485,7 +561,7 @@ def main() -> int:
     if (
         args
         and args[0] in {"domain", "skill", "workflow", "consistency", "health"}
-        and args[1:2] != ["init-content-contracts"]
+        and args[1:2] not in (["init-content-contracts"], ["validate-manifest"])
     ):
         print("⚠️ 该 L4 legacy 命令已弃用，请迁移到 contract/registry/harness 或 cockpit", file=sys.stderr)
 
@@ -500,6 +576,7 @@ def main() -> int:
         print("    harness run DOMAIN_ID --gates ...   运行只读确定性门禁")
         print("    content audit ROOT --json           审计 Documents 内容面边界")
         print("    domain init-content-contracts ROOT --domain-id ID  初始化声明式内容契约")
+        print("    domain validate-manifest ID --registry PATH  按登记域 ID 校验声明契约")
         print("    domain list/info ...                legacy 域视图")
         print("    skill list/show/run ...             legacy 技能入口")
         print("    workflow list/show/run ...          legacy 工作流入口")
@@ -526,6 +603,8 @@ def main() -> int:
         sub = args[1] if len(args) > 1 else "list"
         if sub == "init-content-contracts":
             return cmd_domain_init_content_contracts(args[2:])
+        if sub == "validate-manifest":
+            return cmd_domain_validate_manifest(args[2:])
         if sub == "list":
             return cmd_list(args[2:])
         if sub == "info":
