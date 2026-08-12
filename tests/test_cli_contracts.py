@@ -120,6 +120,130 @@ def test_registry_list_without_configuration_returns_exit_2(monkeypatch, capsys)
     assert payload["error"]["code"] == "L4-CONFIG-002"
 
 
+def test_domain_validate_manifest_resolves_registered_domain_by_id(tmp_path: Path, monkeypatch, capsys) -> None:
+    index = write_registry(tmp_path)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "l4-kernel",
+            "domain",
+            "validate-manifest",
+            "sample",
+            "--registry",
+            str(index),
+            "--json",
+        ],
+    )
+
+    code = cli.main()
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert code == 0
+    assert payload["ok"] is True
+    assert payload["data"]["id"] == "sample"
+    assert payload["data"]["root"] == str((tmp_path / "sample").resolve())
+    assert captured.err == ""
+
+
+def test_domain_validate_manifest_rejects_unknown_domain(tmp_path: Path, monkeypatch, capsys) -> None:
+    index = write_registry(tmp_path)
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "validate-manifest",
+        "missing",
+        "--registry",
+        str(index),
+        "--json",
+    )
+
+    assert code == 1
+    assert payload == {
+        "ok": False,
+        "error": {
+            "code": "L4-CONTRACT-004",
+            "message": "domain is not registered: missing",
+            "path": str(index.resolve()),
+        },
+    }
+
+
+def test_domain_validate_manifest_requires_domain_id(monkeypatch, capsys) -> None:
+    code, payload = invoke(monkeypatch, capsys, "domain", "validate-manifest", "--json")
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+
+
+def test_domain_validate_manifest_requires_registry_configuration(monkeypatch, capsys) -> None:
+    monkeypatch.delenv("L4_DOMAIN_REGISTRY", raising=False)
+
+    code, payload = invoke(monkeypatch, capsys, "domain", "validate-manifest", "sample", "--json")
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+
+
+def test_domain_validate_manifest_treats_malformed_registry_as_configuration_error(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    index = tmp_path / "registry.yaml"
+    index.write_text("kind: broken\n", encoding="utf-8")
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "validate-manifest",
+        "sample",
+        "--registry",
+        str(index),
+        "--json",
+    )
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONTRACT-001"
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        ("--registry", "--json"),
+        ("--registry=",),
+        ("--registry", "one.yaml", "--registry", "two.yaml"),
+        ("--json", "--json"),
+        ("unexpected",),
+        ("--unknown",),
+    ],
+)
+def test_domain_validate_manifest_rejects_invalid_arguments_before_registry_read(
+    tail: tuple[str, ...], tmp_path: Path, monkeypatch, capsys
+) -> None:
+    valid_environment_registry = write_registry(tmp_path)
+    monkeypatch.setenv("L4_DOMAIN_REGISTRY", str(valid_environment_registry))
+
+    code, payload = invoke(
+        monkeypatch,
+        capsys,
+        "domain",
+        "validate-manifest",
+        "sample",
+        *tail,
+    )
+
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "L4-CONFIG-002"
+
+
 def test_harness_run_json(tmp_path: Path, monkeypatch, capsys) -> None:
     index = write_registry(tmp_path)
 
@@ -289,7 +413,9 @@ def test_domain_init_content_contracts_rejects_existing_malformed_manifest(tmp_p
     assert sorted(path.name for path in root.iterdir()) == ["DOMAIN.yaml"]
 
 
-def test_domain_init_content_contracts_preflights_symlinked_target_without_partial_write(tmp_path, monkeypatch, capsys) -> None:
+def test_domain_init_content_contracts_preflights_symlinked_target_without_partial_write(
+    tmp_path, monkeypatch, capsys
+) -> None:
     root = tmp_path / "domain"
     external = tmp_path / "external"
     root.mkdir()
@@ -315,7 +441,9 @@ def test_domain_init_content_contracts_preflights_symlinked_target_without_parti
     assert sorted(path.name for path in root.iterdir()) == ["profiles"]
 
 
-def test_domain_init_content_contracts_rejects_executable_existing_target_without_overwrite(tmp_path, monkeypatch, capsys) -> None:
+def test_domain_init_content_contracts_rejects_executable_existing_target_without_overwrite(
+    tmp_path, monkeypatch, capsys
+) -> None:
     root = tmp_path / "domain"
     root.mkdir()
     method = root / "Method.md"
@@ -340,7 +468,9 @@ def test_domain_init_content_contracts_rejects_executable_existing_target_withou
     assert sorted(path.name for path in root.iterdir()) == ["Method.md"]
 
 
-def test_domain_init_content_contracts_rejects_traversal_in_authoritative_domain_id(tmp_path, monkeypatch, capsys) -> None:
+def test_domain_init_content_contracts_rejects_traversal_in_authoritative_domain_id(
+    tmp_path, monkeypatch, capsys
+) -> None:
     root = tmp_path / "domain"
 
     code, payload = invoke(
@@ -396,7 +526,9 @@ def test_legacy_init_preserves_noncanonical_path_identity_without_fabrication(tm
     assert manifest["id"] == root_name
 
 
-def test_domain_init_content_contracts_reports_publication_evidence_on_method_permission_error(tmp_path, monkeypatch, capsys) -> None:
+def test_domain_init_content_contracts_reports_publication_evidence_on_method_permission_error(
+    tmp_path, monkeypatch, capsys
+) -> None:
     root = tmp_path / "domain"
     original_write = templates._write_contract
 
@@ -427,7 +559,9 @@ def test_domain_init_content_contracts_reports_publication_evidence_on_method_pe
     assert (root / "DOMAIN.yaml").exists()
 
 
-def test_domain_init_content_contracts_serializes_directory_entry_durability_evidence(tmp_path, monkeypatch, capsys) -> None:
+def test_domain_init_content_contracts_serializes_directory_entry_durability_evidence(
+    tmp_path, monkeypatch, capsys
+) -> None:
     root = tmp_path / "domain"
 
     def fail_publication(*_args, **_kwargs):
@@ -509,7 +643,10 @@ def test_content_audit_json_serializes_surrogateescaped_path_as_valid_utf8(tmp_p
     payload = json.loads(output.getvalue().decode("utf-8", errors="strict"))
 
     assert code == 1
-    assert any(item["relative_path"] == f"_archive/{filename}" and item["code"] == "L4-CONTENT-011" for item in payload["data"]["violations"])
+    assert any(
+        item["relative_path"] == f"_archive/{filename}" and item["code"] == "L4-CONTENT-011"
+        for item in payload["data"]["violations"]
+    )
 
 
 def test_content_audit_rejects_missing_root(tmp_path, monkeypatch, capsys) -> None:
