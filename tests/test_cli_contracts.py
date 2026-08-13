@@ -291,6 +291,23 @@ def test_content_audit_json_fails_closed_on_runtime_artifact(tmp_path, monkeypat
     assert payload["data"]["violations"][0]["code"] == "L4-CONTENT-008"
 
 
+def test_content_audit_summary_json_bounds_violation_details(tmp_path, monkeypatch, capsys) -> None:
+    runtime = tmp_path / "_runtime"
+    runtime.mkdir()
+    for index in range(13):
+        (runtime / f"run-{index:02}.py").write_text("print('x')", encoding="utf-8")
+
+    code, payload = invoke(monkeypatch, capsys, "content", "audit", str(tmp_path), "--json", "--summary")
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert payload["data"]["counts"]["runtime"] == 13
+    assert payload["data"]["violation_count"] == 13
+    assert payload["data"]["truncated_violation_count"] == 3
+    assert len(payload["data"]["violation_samples"]) == 10
+    assert "artifacts" not in payload["data"]
+
+
 def test_content_audit_json_accepts_contracts_and_content(tmp_path, monkeypatch, capsys) -> None:
     root = tmp_path / "domain"
     root.mkdir()

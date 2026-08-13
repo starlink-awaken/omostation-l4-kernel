@@ -122,6 +122,19 @@ class ContentPlaneReport:
             "artifacts": [item.to_dict() for item in self.artifacts],
         }
 
+    def summary_dict(self, *, sample_limit: int = 10) -> dict[str, Any]:
+        """Return a bounded audit result suitable for routine governance checks."""
+
+        violations = self.violations
+        samples = violations[:sample_limit]
+        return {
+            "root": str(self.root),
+            "counts": self.counts,
+            "violation_count": len(violations),
+            "truncated_violation_count": len(violations) - len(samples),
+            "violation_samples": [item.to_dict() for item in samples],
+        }
+
 
 def _workspace_bridge(path: Path) -> bool:
     if path.suffix.lower() not in _RUNTIME_SUFFIXES:

@@ -460,7 +460,9 @@ def cmd_content(args: list[str]) -> int:
     """Audit one Documents root as a declarative content plane."""
 
     if not args or args[0] != "audit" or len(args) < 2:
-        _json_envelope(error={"code": "L4-CONFIG-002", "message": "usage: content audit ROOT --json", "path": None})
+        _json_envelope(
+            error={"code": "L4-CONFIG-002", "message": "usage: content audit ROOT --json [--summary]", "path": None}
+        )
         return 2
     root = Path(args[1]).expanduser()
     try:
@@ -468,7 +470,8 @@ def cmd_content(args: list[str]) -> int:
     except ValueError as error:
         _json_envelope(error={"code": "L4-CONFIG-002", "message": str(error), "path": str(root)})
         return 2
-    _json_data(report.to_dict(), ok=report.ok)
+    data = report.summary_dict() if "--summary" in args else report.to_dict()
+    _json_data(data, ok=report.ok)
     return 0 if report.ok else 1
 
 
@@ -574,7 +577,7 @@ def main() -> int:
         print("    contract validate PATH --json       校验 DomainManifest")
         print("    registry list --registry PATH --json 列出显式知识域")
         print("    harness run DOMAIN_ID --gates ...   运行只读确定性门禁")
-        print("    content audit ROOT --json           审计 Documents 内容面边界")
+        print("    content audit ROOT --json [--summary] 审计 Documents 内容面边界")
         print("    domain init-content-contracts ROOT --domain-id ID  初始化声明式内容契约")
         print("    domain validate-manifest ID --registry PATH  按登记域 ID 校验声明契约")
         print("    domain list/info ...                legacy 域视图")
