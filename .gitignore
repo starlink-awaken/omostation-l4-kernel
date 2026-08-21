@@ -60,3 +60,6 @@ logs/
 # ── Local OMC runtime state ──
 .omc/
 *.tmp
+
+# Auto-generated bump workflow
+.github/workflows/bump-main-pr.yml
