@@ -159,20 +159,48 @@ def test_content_plane_tree_drift_during_audit_fails_closed(tmp_path: Path, monk
     domain = tmp_path / "domain"
     domain.mkdir()
     _write(domain, "note.md")
-    drifted = False
+    drift_count = 0
 
     def mutate_tree(stage: str, path: Path) -> None:
-        nonlocal drifted
-        if stage == "audit:enumerated" and path == domain and not drifted:
-            _write(domain, "late.py")
-            drifted = True
+        nonlocal drift_count
+        if stage == "audit:enumerated" and path == domain:
+            drift_count += 1
+            _write(domain, f"late-{drift_count}.md")
 
     monkeypatch.setattr(content_archive, "_stability_hook", mutate_tree, raising=False)
 
     report = audit_content_plane(domain)
 
     assert report.ok is False
+    assert report.stability_attempts == 3
     assert any(item.code == "L4-CONTENT-011" for item in report.violations)
+
+
+def test_audit_retries_one_transient_tree_drift_before_returning_stable_result(
+    tmp_path: Path, monkeypatch
+) -> None:
+    domain = tmp_path / "domain"
+    domain.mkdir()
+    _write(domain, "note.md")
+    mutated = False
+
+    def mutate_once(stage: str, path: Path) -> None:
+        nonlocal mutated
+        if stage == "audit:enumerated" and path == domain and not mutated:
+            _write(domain, "arrived-during-first-attempt.md")
+            mutated = True
+
+    monkeypatch.setattr(content_archive, "_stability_hook", mutate_once, raising=False)
+
+    report = audit_content_plane(domain)
+
+    assert report.ok is True
+    assert report.stability_attempts == 2
+    assert [item.relative_path for item in report.artifacts] == [
+        "arrived-during-first-attempt.md",
+        "note.md",
+    ]
+    assert not any(item.relative_path == "." and item.code == "L4-CONTENT-011" for item in report.artifacts)
 
 
 def test_external_symlink_target_type_drift_during_audit_fails_closed(tmp_path: Path, monkeypatch) -> None:
