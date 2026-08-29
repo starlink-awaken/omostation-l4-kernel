@@ -251,8 +251,7 @@ def classify_artifact(
 
 def _has_stability_failure(report: ContentPlaneReport) -> bool:
     return any(
-        item.code == ARCHIVE_ISSUE_CODE
-        and any(marker in item.reason for marker in _STABILITY_FAILURE_MARKERS)
+        item.code == ARCHIVE_ISSUE_CODE and any(marker in item.reason for marker in _STABILITY_FAILURE_MARKERS)
         for item in report.artifacts
     )
 
