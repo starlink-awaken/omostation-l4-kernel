@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import stat
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +67,12 @@ _ISSUE_CODES = {
     "projection": "L4-CONTENT-010",
     "invalid_archive": ARCHIVE_ISSUE_CODE,
 }
+_DEFAULT_AUDIT_ATTEMPTS = 3
+_STABILITY_FAILURE_MARKERS = (
+    "changed during",
+    "identity changed",
+    "target changed",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +105,7 @@ class ContentPlaneReport:
 
     root: Path
     artifacts: tuple[ArtifactClassification, ...]
+    stability_attempts: int = 1
 
     @property
     def violations(self) -> tuple[ArtifactClassification, ...]:
@@ -117,6 +124,7 @@ class ContentPlaneReport:
     def to_dict(self) -> dict[str, Any]:
         return {
             "root": str(self.root),
+            "stability_attempts": self.stability_attempts,
             "counts": self.counts,
             "violations": [item.to_dict() for item in self.violations],
             "artifacts": [item.to_dict() for item in self.artifacts],
@@ -129,6 +137,7 @@ class ContentPlaneReport:
         samples = violations[:sample_limit]
         return {
             "root": str(self.root),
+            "stability_attempts": self.stability_attempts,
             "counts": self.counts,
             "violation_count": len(violations),
             "truncated_violation_count": len(violations) - len(samples),
@@ -240,8 +249,15 @@ def classify_artifact(
     return ArtifactClassification(path_absolute, relative, kind, reason)
 
 
-def audit_content_plane(root: Path) -> ContentPlaneReport:
-    """Scan one root deterministically without following symlink targets."""
+def _has_stability_failure(report: ContentPlaneReport) -> bool:
+    return any(
+        item.code == ARCHIVE_ISSUE_CODE and any(marker in item.reason for marker in _STABILITY_FAILURE_MARKERS)
+        for item in report.artifacts
+    )
+
+
+def _audit_content_plane_once(root: Path) -> ContentPlaneReport:
+    """Run one complete content-plane scan without following symlink targets."""
 
     root_absolute = root.expanduser().absolute()
     try:
@@ -282,3 +298,20 @@ def audit_content_plane(root: Path) -> ContentPlaneReport:
         artifacts.append(_invalid_node(root_absolute, ".", str(error)))
     artifacts.sort(key=lambda item: item.relative_path)
     return ContentPlaneReport(root_absolute, tuple(artifacts))
+
+
+def audit_content_plane(root: Path, *, max_attempts: int = _DEFAULT_AUDIT_ATTEMPTS) -> ContentPlaneReport:
+    """Scan one root with bounded whole-attempt retries for transient drift.
+
+    Every attempt keeps the strict snapshot and no-follow checks. A report is
+    returned only after a stable attempt or after all attempts fail closed.
+    """
+
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be positive")
+    attempts_used = 1
+    report = _audit_content_plane_once(root)
+    while attempts_used < max_attempts and _has_stability_failure(report):
+        report = _audit_content_plane_once(root)
+        attempts_used += 1
+    return replace(report, stability_attempts=attempts_used)
