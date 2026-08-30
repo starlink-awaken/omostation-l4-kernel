@@ -262,3 +262,15 @@ def test_extensionless_plain_data_stays_content(tmp_path: Path) -> None:
     path = _write(tmp_path, "_knowledge/payload", "raw text without interpreter line")
     path.chmod(0o644)
     assert classify_artifact(tmp_path, path).kind == "content"
+
+
+def test_filesystem_transient_files_are_not_audited(tmp_path: Path) -> None:
+    from l4_kernel.content_plane import audit_content_plane
+    transient = _write(tmp_path, "_control/.fuse_hidden0000abc", "x" * 32)
+    transient.chmod(0o711)
+    normal = _write(tmp_path, "_control/executors/tool.py", "#!/usr/bin/env python3\n")
+    normal.chmod(0o711)
+    report = audit_content_plane(tmp_path)
+    names = [a.relative_path for a in report.artifacts]
+    assert all(not n.startswith("_control/.fuse_hidden") for n in names)
+    assert "_control/executors/tool.py" in names

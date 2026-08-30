@@ -162,13 +162,19 @@ def _has_shebang(path: Path) -> bool:
         return False
 
 
-def _auditable_file(path: Path) -> bool:
-    """Include every non-directory node without following symlinks."""
+_FS_TRANSIENT_PREFIXES = (".fuse_hidden", ".nfs")
 
+
+def _auditable_file(path: Path) -> None | bool:
+    """Include every non-directory node without following symlinks; skip filesystem transient files."""
     try:
-        return not stat.S_ISDIR(path.lstat().st_mode)
+        if not stat.S_ISDIR(path.lstat().st_mode):
+            if path.name.startswith(_FS_TRANSIENT_PREFIXES):
+                return False
+            return True
     except OSError:
         return True
+    return False
 
 
 def _invalid_node(path: Path, relative: str, reason: str) -> ArtifactClassification:
