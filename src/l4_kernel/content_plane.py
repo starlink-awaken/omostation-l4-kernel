@@ -153,6 +153,15 @@ def _workspace_bridge(path: Path) -> bool:
     return BRIDGE_MARKER in payload.decode("utf-8", errors="ignore")
 
 
+def _has_shebang(path: Path) -> bool:
+    """Detect a `#!` interpreter line; survives lost exec bits that hide runtime scripts."""
+    try:
+        with path.open("rb") as fh:
+            return fh.read(2) == b"#!"
+    except OSError:
+        return False
+
+
 def _auditable_file(path: Path) -> bool:
     """Include every non-directory node without following symlinks."""
 
@@ -235,7 +244,7 @@ def classify_artifact(
                 kind, reason = "content_archive", "frozen historical source material covered by CONTENT_ARCHIVE.yaml"
             else:
                 kind, reason = "invalid_archive", f"invalid CONTENT_ARCHIVE.yaml: {archive.message}"
-        elif suffix in _RUNTIME_SUFFIXES or (executable and not suffix):
+        elif suffix in _RUNTIME_SUFFIXES or ((executable or _has_shebang(path_absolute)) and not suffix):
             kind, reason = "runtime", "executable implementation belongs in Workspace"
         elif name_lower in _PROJECTION_NAMES or "_generated" in parts or "generated" in parts:
             kind, reason = "projection", "mutable or generated view must not become canonical truth"
