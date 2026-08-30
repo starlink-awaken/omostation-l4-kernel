@@ -250,3 +250,15 @@ def test_external_symlink_target_type_drift_after_classification_fails_closed(tm
 
     assert report.ok is False
     assert any(item.code == "L4-CONTENT-011" for item in report.violations)
+
+
+def test_extensionless_shebang_script_is_runtime_even_with_lost_exec_bit(tmp_path: Path) -> None:
+    path = _write(tmp_path, "_control/executors/kems-mcp", "#!/usr/bin/env python3\nprint('kems')\n")
+    path.chmod(0o644)
+    assert classify_artifact(tmp_path, path).kind == "runtime"
+
+
+def test_extensionless_plain_data_stays_content(tmp_path: Path) -> None:
+    path = _write(tmp_path, "_knowledge/payload", "raw text without interpreter line")
+    path.chmod(0o644)
+    assert classify_artifact(tmp_path, path).kind == "content"
