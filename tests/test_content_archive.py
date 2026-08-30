@@ -73,6 +73,30 @@ def test_valid_frozen_archive_classifies_historical_code_and_manifest(tmp_path: 
     assert audit_content_plane(tmp_path).ok is True
 
 
+def test_valid_archive_machine_log_context_remains_content_archive(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / "legacy"
+    log = archive / "_runtime" / "daemon.log"
+    log.parent.mkdir(parents=True)
+    log.write_text("historical output\n", encoding="utf-8")
+    _write_archive_manifest(archive)
+
+    assert classify_artifact(tmp_path, log).kind == "content_archive"
+
+
+def test_invalid_archive_machine_log_context_remains_invalid_archive(tmp_path: Path) -> None:
+    archive = tmp_path / "_archive" / "legacy"
+    log = archive / "_runtime" / "daemon.log"
+    log.parent.mkdir(parents=True)
+    log.write_text("historical output\n", encoding="utf-8")
+    manifest = _write_archive_manifest(archive)
+    manifest.write_text("schema: l4.content-archive/v1\n", encoding="utf-8")
+
+    result = classify_artifact(tmp_path, log)
+
+    assert result.kind == "invalid_archive"
+    assert result.code == "L4-CONTENT-011"
+
+
 def test_archive_manifest_outside_permitted_plane_fails_closed(tmp_path: Path) -> None:
     archive = tmp_path / "legacy"
     archive.mkdir()

@@ -291,6 +291,27 @@ def test_content_audit_json_fails_closed_on_runtime_artifact(tmp_path, monkeypat
     assert payload["data"]["violations"][0]["code"] == "L4-CONTENT-008"
 
 
+def test_content_audit_json_reports_machine_log_as_existing_cache_issue(tmp_path, monkeypatch, capsys) -> None:
+    log = tmp_path / "_inbox" / "hourly_runner.log"
+    log.parent.mkdir()
+    log.write_text("", encoding="utf-8")
+
+    code, payload = invoke(monkeypatch, capsys, "content", "audit", str(tmp_path), "--json")
+
+    assert code == 1
+    assert payload["ok"] is False
+    assert payload["data"]["counts"] == {"cache": 1}
+    assert payload["data"]["violations"] == [
+        {
+            "path": str(log),
+            "relative_path": "_inbox/hourly_runner.log",
+            "kind": "cache",
+            "reason": "derived cache or mutable local store belongs in Workspace",
+            "code": "L4-CONTENT-009",
+        }
+    ]
+
+
 def test_content_audit_summary_json_bounds_violation_details(tmp_path, monkeypatch, capsys) -> None:
     runtime = tmp_path / "_runtime"
     runtime.mkdir()

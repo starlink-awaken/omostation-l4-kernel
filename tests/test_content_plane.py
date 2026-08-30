@@ -29,6 +29,44 @@ def test_classifies_contract_content_runtime_projection_and_cache(tmp_path: Path
         assert classify_artifact(tmp_path, path).kind == expected
 
 
+def test_machine_generated_logs_are_cache_only_in_operational_contexts(tmp_path: Path) -> None:
+    selected = [
+        "@cockpit/_generated/governance-cron.log",
+        "@work/_runtime/reports/cron.log",
+        "@learning/_control/logs/launchd.stderr.log",
+        "_inbox/hourly_runner.log",
+        "_inbox/hourly_runner_err.log",
+    ]
+    preserved = [
+        "_knowledge/meeting.log",
+        "_inbox/meeting.log",
+        "_inbox/nested/hourly_runner.log",
+        "_inbox/hourly_runner.txt",
+    ]
+
+    for relative in selected:
+        result = classify_artifact(tmp_path, _write(tmp_path, relative))
+        assert result.kind == "cache"
+        assert result.code == "L4-CONTENT-009"
+
+    for relative in preserved:
+        assert classify_artifact(tmp_path, _write(tmp_path, relative)).kind == "content"
+
+
+def test_machine_generated_log_symlink_has_cache_parity(tmp_path: Path) -> None:
+    root = tmp_path / "domain"
+    root.mkdir()
+    external = _write(tmp_path, "external.log", "runtime output")
+    link = root / "_inbox" / "hourly_runner.log"
+    link.parent.mkdir()
+    link.symlink_to(external)
+
+    result = classify_artifact(root, link)
+
+    assert result.kind == "cache"
+    assert result.code == "L4-CONTENT-009"
+
+
 def test_workspace_bridge_marker_is_not_reported_as_runtime(tmp_path: Path) -> None:
     bridge = _write(
         tmp_path,
