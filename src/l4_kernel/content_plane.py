@@ -162,6 +162,23 @@ def _has_shebang(path: Path) -> bool:
         return False
 
 
+def _machine_generated_log(relative: str) -> bool:
+    """Identify mutable machine logs without treating historical logs as cache."""
+
+    relative_path = Path(relative)
+    if relative_path.suffix.lower() != ".log":
+        return False
+    parts = tuple(part.lower() for part in relative_path.parts)
+    if "_generated" in parts or "_runtime" in parts:
+        return True
+    if any(parts[index : index + 2] == ("_control", "logs") for index in range(len(parts) - 1)):
+        return True
+    if len(parts) != 2 or parts[0] != "_inbox":
+        return False
+    stem = relative_path.stem.lower()
+    return stem.endswith("_runner") or stem.endswith("_runner_err")
+
+
 _FS_TRANSIENT_PREFIXES = (".fuse_hidden", ".nfs")
 
 
@@ -230,6 +247,8 @@ def classify_artifact(
                 kind, reason = "content_archive", "frozen historical source material covered by CONTENT_ARCHIVE.yaml"
             else:
                 kind, reason = "invalid_archive", f"invalid CONTENT_ARCHIVE.yaml: {archive.message}"
+        elif _machine_generated_log(relative):
+            kind, reason = "cache", "derived cache or mutable local store belongs in Workspace"
         elif suffix in _RUNTIME_SUFFIXES:
             kind, reason = "runtime", "executable implementation belongs in Workspace"
         else:
@@ -250,6 +269,8 @@ def classify_artifact(
                 kind, reason = "content_archive", "frozen historical source material covered by CONTENT_ARCHIVE.yaml"
             else:
                 kind, reason = "invalid_archive", f"invalid CONTENT_ARCHIVE.yaml: {archive.message}"
+        elif _machine_generated_log(relative):
+            kind, reason = "cache", "derived cache or mutable local store belongs in Workspace"
         elif suffix in _RUNTIME_SUFFIXES or ((executable or _has_shebang(path_absolute)) and not suffix):
             kind, reason = "runtime", "executable implementation belongs in Workspace"
         elif name_lower in _PROJECTION_NAMES or "_generated" in parts or "generated" in parts:
