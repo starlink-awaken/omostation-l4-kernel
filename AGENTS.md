@@ -1,3 +1,9 @@
+---
+type: ssot
+owner: governance-team
+last_updated: 2026-09-03
+---
+
 # AGENTS.md — L4 Kernel
 
     > Scope: project-local developer guide for `l4-kernel`.

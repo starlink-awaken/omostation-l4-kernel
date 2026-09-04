@@ -1,3 +1,9 @@
+---
+type: ssot
+owner: governance-team
+last_updated: 2026-09-03
+---
+
 # L4 Kernel FAQ
 
 ## What is L4 Kernel?

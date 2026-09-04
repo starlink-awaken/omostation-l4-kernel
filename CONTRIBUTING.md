@@ -1,3 +1,9 @@
+---
+type: ssot
+owner: governance-team
+last_updated: 2026-09-03
+---
+
 # Contributing to L4 Kernel
 
 > self-layer management and domain registry

@@ -1,3 +1,9 @@
+---
+type: ssot
+owner: governance-team
+last_updated: 2026-09-03
+---
+
 # L4 Knowledge Sovereignty Phase 0 Rollback
 
 Phase 0 adds a read-only contract and Harness surface. Rollback must preserve Documents canonical content and path containment.

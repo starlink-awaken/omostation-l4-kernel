@@ -1,3 +1,9 @@
+---
+type: ssot
+owner: governance-team
+last_updated: 2026-09-03
+---
+
 # L4-Kernel 能力地图
 
 > 自我层管理面 · 域 (见 project-registry.yaml: l4-kernel.domains) · MCP tools (见 project-registry.yaml: l4-kernel)

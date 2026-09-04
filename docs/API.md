@@ -1,3 +1,9 @@
+---
+type: ssot
+owner: governance-team
+last_updated: 2026-09-03
+---
+
 # L4 Kernel Phase 0 API / Usage Reference
 
 > Quick reference for using **L4 Kernel** programmatically and from the command line.
