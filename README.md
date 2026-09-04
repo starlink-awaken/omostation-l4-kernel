@@ -1,3 +1,10 @@
+---
+type: derived
+source: projects/l4-kernel
+owner: governance-team
+last_updated: 2026-09-03
+---
+
 # L4 Kernel
 
 🌐 [简体中文](README.zh.md)
