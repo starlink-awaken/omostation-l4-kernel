@@ -351,3 +351,38 @@ class HarnessRunner:
             path=manifest.root,
             gate="T7",
         )
+
+    @staticmethod
+    def _gate_t3(manifest: DomainManifest) -> tuple[ValidationIssue, ...]:
+        """T3 Lifecycle: DOMAIN.yaml freshness (mtime 距今 ≤180 天)."""
+        issues: list[ValidationIssue] = []
+        manifest_file = manifest.root / "DOMAIN.yaml"
+        if not manifest_file.is_file():
+            issues.append(ValidationIssue(
+                code="L4-LIFECYCLE-001", severity="warning",
+                message="DOMAIN.yaml not found for freshness check",
+                path=manifest.root, gate="T3",
+            ))
+            return tuple(issues)
+        age_days = (datetime.now(UTC) - datetime.fromtimestamp(
+            manifest_file.stat().st_mtime, tz=UTC
+        )).days
+        if age_days > 180:
+            issues.append(ValidationIssue(
+                code="L4-LIFECYCLE-002", severity="warning",
+                message=f"DOMAIN.yaml last modified {age_days} days ago (>180d freshness window)",
+                path=manifest_file, gate="T3",
+            ))
+        return tuple(issues)
+
+    @staticmethod
+    def _gate_t5(manifest: DomainManifest) -> tuple[ValidationIssue, ...]:
+        """T5 Retrieval: 索引覆盖率检查 (KOS documents 有 canonical_path 的占比)."""
+        issues: list[ValidationIssue] = []
+        return tuple(issues)  # 需 KOS 索引数据, Phase 1 实现
+
+    @staticmethod
+    def _gate_t6(manifest: DomainManifest) -> tuple[ValidationIssue, ...]:
+        """T6 Scenario: 用户场景验证 (golden query result check)."""
+        issues: list[ValidationIssue] = []
+        return tuple(issues)  # 需场景数据, Phase 1 实现
