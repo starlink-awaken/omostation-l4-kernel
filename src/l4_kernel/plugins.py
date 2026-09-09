@@ -28,6 +28,7 @@ from pathlib import Path
       def get_mechanisms(self) -> dict[str, callable]
 """
 
+from collections.abc import Callable
 from typing import Protocol
 
 from l4_kernel.path_policy import legacy_execution_denied
@@ -49,10 +50,10 @@ class L4Plugin(Protocol):
     def on_load(self) -> None: ...
     def on_unload(self) -> None: ...
 
-    def get_actions(self) -> dict[str, callable]: ...  # type: ignore[reportGeneralTypeIssues]
+    def get_actions(self) -> dict[str, Callable]: ...
     def get_workflows(self) -> dict[str, dict]: ...
     def get_specifications(self) -> dict[str, dict]: ...
-    def get_mechanisms(self) -> dict[str, callable]: ...  # type: ignore[reportGeneralTypeIssues]
+    def get_mechanisms(self) -> dict[str, Callable]: ...
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -77,7 +78,7 @@ class DocumentKemsPlugin:
 
     # ── 业务动作 ────────────────────────────────────────────────────
 
-    def get_actions(self) -> dict[str, callable]:  # type: ignore[reportGeneralTypeIssues]
+    def get_actions(self) -> dict[str, Callable]:
         """KEMS 标准业务动作。
 
         这些是 Agent 可以通过 MCP 调用的高级操作。
@@ -306,7 +307,7 @@ class DocumentKemsPlugin:
 
     # ── KEMS 机制 ───────────────────────────────────────────────────
 
-    def get_mechanisms(self) -> dict[str, callable]:  # type: ignore[reportGeneralTypeIssues]
+    def get_mechanisms(self) -> dict[str, Callable]:
         """KEMS 标准机制。"""
         return {
             "signal_auto_respond": self._mechanism_signal_auto_respond,
@@ -409,7 +410,7 @@ class PluginRegistry:
         """获取指定域类型的所有插件。"""
         return self._plugins.get(domain_type, [])
 
-    def get_action(self, domain_type: str, action_name: str) -> callable | None:  # type: ignore[reportGeneralTypeIssues]
+    def get_action(self, domain_type: str, action_name: str) -> Callable | None:
         """获取指定域类型的业务动作。"""
         for plugin in self.get_plugins(domain_type):
             actions = plugin.get_actions()
@@ -432,7 +433,7 @@ class PluginRegistry:
             specs.update(plugin.get_specifications())
         return specs
 
-    def get_mechanism(self, domain_type: str, mechanism_name: str) -> callable | None:  # type: ignore[reportGeneralTypeIssues]
+    def get_mechanism(self, domain_type: str, mechanism_name: str) -> Callable | None:
         """获取指定域类型的机制。"""
         for plugin in self.get_plugins(domain_type):
             mechanisms = plugin.get_mechanisms()
