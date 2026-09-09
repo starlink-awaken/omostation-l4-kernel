@@ -358,21 +358,27 @@ class HarnessRunner:
         issues: list[ValidationIssue] = []
         manifest_file = manifest.root / "DOMAIN.yaml"
         if not manifest_file.is_file():
-            issues.append(ValidationIssue(
-                code="L4-LIFECYCLE-001", severity="warning",
-                message="DOMAIN.yaml not found for freshness check",
-                path=manifest.root, gate="T3",
-            ))
+            issues.append(
+                ValidationIssue(
+                    code="L4-LIFECYCLE-001",
+                    severity="warning",
+                    message="DOMAIN.yaml not found for freshness check",
+                    path=manifest.root,
+                    gate="T3",
+                )
+            )
             return tuple(issues)
-        age_days = (datetime.now(UTC) - datetime.fromtimestamp(
-            manifest_file.stat().st_mtime, tz=UTC
-        )).days
+        age_days = (datetime.now(UTC) - datetime.fromtimestamp(manifest_file.stat().st_mtime, tz=UTC)).days
         if age_days > 180:
-            issues.append(ValidationIssue(
-                code="L4-LIFECYCLE-002", severity="warning",
-                message=f"DOMAIN.yaml last modified {age_days} days ago (>180d freshness window)",
-                path=manifest_file, gate="T3",
-            ))
+            issues.append(
+                ValidationIssue(
+                    code="L4-LIFECYCLE-002",
+                    severity="warning",
+                    message=f"DOMAIN.yaml last modified {age_days} days ago (>180d freshness window)",
+                    path=manifest_file,
+                    gate="T3",
+                )
+            )
         return tuple(issues)
 
     @staticmethod
