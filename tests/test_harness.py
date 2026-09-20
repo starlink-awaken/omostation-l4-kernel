@@ -195,3 +195,41 @@ def test_t8_reports_missing_root_without_raising(tmp_path: Path) -> None:
 
     assert health.ok is False
     assert any(issue.code == "L4-ROOT-000" and issue.gate == "T8" for issue in health.issues)
+
+
+def test_harness_result_self_declares_executed_gates_and_surfaces(tmp_path: Path) -> None:
+    """`ok: true` 必须能自证：结果携带本次执行的 gate 与其输入面。
+
+    否则 `issues: []` 与"零 gate 执行"在输出上不可区分。
+    """
+
+    health = HarnessRunner().run(make_manifest(tmp_path), PROFILE_GATES["operational"])
+
+    assert health.gates == ("T0", "T1", "T2", "T4", "T7")
+    payload = health.to_dict()
+    assert payload["gates"] == ["T0", "T1", "T2", "T4", "T7"]
+    # 面覆盖须与 gate 表同步：T4 读声明资产，其余（T0/T1/T2/T7）只读 DOMAIN.yaml。
+    assert payload["surfaces"] == [
+        "DOMAIN.yaml",
+        "_control/skills/*.yaml",
+        "_control/workflows/*.yaml",
+    ]
+
+
+def test_content_plane_surface_is_declared_only_for_t8(tmp_path: Path) -> None:
+    """T8 是唯一读全根内容面的 gate，且它不在任何内置档位中（域健康不被覆盖）。"""
+
+    only_t8 = HarnessRunner().run(make_manifest(tmp_path), ("T8",))
+
+    assert only_t8.surfaces == ("<domain-root>/**",)
+    assert all("T8" not in gates for gates in PROFILE_GATES.values())
+
+
+def test_unsupported_gate_is_not_reported_as_executed(tmp_path: Path) -> None:
+    """未支持的 gate 只报错，不得进入"已执行"清单，否则覆盖面向证会虚报。"""
+
+    health = HarnessRunner().run(make_manifest(tmp_path), ("T0", "T9"))
+
+    assert health.gates == ("T0",)
+    assert health.surfaces == ("DOMAIN.yaml",)
+    assert any(issue.code == "L4-HARNESS-002" for issue in health.issues)
