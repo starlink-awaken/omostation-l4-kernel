@@ -13,7 +13,7 @@ from yaml.nodes import MappingNode, ScalarNode
 
 from l4_kernel.content_plane import audit_content_plane
 from l4_kernel.contracts import DomainHealth, DomainManifest, ValidationIssue, ValidationResult
-from l4_kernel.harness_profiles import GATES, PROFILE_GATES
+from l4_kernel.harness_profiles import GATES, GATE_SURFACES, PROFILE_GATES
 from l4_kernel.path_policy import PathPolicyError, resolve_within
 from l4_kernel.skill_loader import ACTION_CATALOG
 
@@ -109,6 +109,7 @@ class HarnessRunner:
         """Run an explicit ordered gate set over one manifest."""
 
         issues: list[ValidationIssue] = []
+        executed: list[str] = []
         for gate in gates:
             if gate not in GATES:
                 issues.append(
@@ -121,13 +122,20 @@ class HarnessRunner:
                     )
                 )
                 continue
+            executed.append(gate)
             issues.extend(getattr(self, f"_gate_{gate.lower()}")(manifest))
+
+        # 覆盖面向证：把"实际执行了哪些 gate"与其声明的输入面写进结果，
+        # 否则 `ok: true` 无法与"零 gate 执行"区分（见 harness_profiles.GATE_SURFACES）。
+        surfaces = tuple(sorted({surface for gate in executed for surface in GATE_SURFACES.get(gate, ())}))
 
         return DomainHealth(
             domain_id=manifest.id,
             profile_id=manifest.harness_profile_ref,
             checked_at=datetime.now(UTC).isoformat(),
             issues=tuple(issues),
+            gates=tuple(executed),
+            surfaces=surfaces,
         )
 
     def run_profile(self, manifest: DomainManifest) -> DomainHealth:
