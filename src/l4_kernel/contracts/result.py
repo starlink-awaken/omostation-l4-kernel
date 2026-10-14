@@ -55,6 +55,10 @@ class DomainHealth:
     profile_id: str
     checked_at: str
     issues: tuple[ValidationIssue, ...]
+    # 本次实际执行的 gate 清单与其声明的输入面（由 harness 填充）。
+    # 二者随结果一起输出，使 `ok: true` 与"什么都没查"可区分 —— 见 harness_profiles.GATE_SURFACES。
+    gates: tuple[str, ...] = ()
+    surfaces: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -66,5 +70,7 @@ class DomainHealth:
             "profile_id": self.profile_id,
             "checked_at": self.checked_at,
             "ok": self.ok,
+            "gates": list(self.gates),
+            "surfaces": list(self.surfaces),
             "issues": [issue.to_dict() for issue in self.issues],
         }
