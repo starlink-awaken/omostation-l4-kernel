@@ -13,7 +13,7 @@ from yaml.nodes import MappingNode, ScalarNode
 
 from l4_kernel.content_plane import audit_content_plane
 from l4_kernel.contracts import DomainHealth, DomainManifest, ValidationIssue, ValidationResult
-from l4_kernel.harness_profiles import GATES, GATE_SURFACES, PROFILE_GATES
+from l4_kernel.harness_profiles import GATE_SURFACES, GATES, PROFILE_GATES
 from l4_kernel.path_policy import PathPolicyError, resolve_within
 from l4_kernel.skill_loader import ACTION_CATALOG
 
