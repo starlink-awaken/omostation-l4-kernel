@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# CR-CI-RUNNER-COST: test 矩阵含 macos-latest（10x 单价），必须有 concurrency 组压住堆叠。
+# PR 测试取 cancel-in-progress: true —— 新 push 顶掉在跑的，检查总会跑到 head SHA。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
